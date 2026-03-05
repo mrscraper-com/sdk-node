@@ -41,6 +41,7 @@ npm install @mrscraper/sdk
 ## Requirements
 
 - Node.js >= 18
+- Your project must use ES Modules. Add `"type": "module"` to your `package.json`:
 
 ## Authentication
 
