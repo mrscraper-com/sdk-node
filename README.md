@@ -1,9 +1,20 @@
+---
+name: MrScraper Node SDK
+description: Run AI-powered, unblockable web scraping, data extraction with natural language using MrScraper Node SDK
+tags: [scraping, data-extraction, web-crawling, stealth-browser, web-automation]
+homepage: https://mrscraper.com/
+support_email: support@mrscraper.com
+---
+
 # @mrscraper-com/sdk
 ![](./mrscraper.jpeg)
 
 Official Node.js SDK for the [MrScraper](https://mrscraper.com) API.
 
-Fetch pages, run AI scrapers, rerun manual scrapers, and retrieve results — with full TypeScript support and zero dependencies.
+Scrape any data from any websites.
+Unblock pages, create and scale AI scrapers, manual scrapers, and retrieve results synchronously and asynchronously.
+It is stealth, reliable, and scalable.
+Every action is mirrored on our platform https://app.mrscraper.com
 
 [![npm version](https://img.shields.io/npm/v/@mrscraper-com/sdk)](https://www.npmjs.com/package/@mrscraper-com/sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
