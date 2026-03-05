@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { fetchHtml, createAiScraper, getResultById, MrScraperError } from "@mrscraper-com/sdk";
+import { fetchHtml, createAiScraper, getResultById, MrScraperError } from "@mrscraper/sdk";
 
 try {
   const html = await fetchHtml({

@@ -6,7 +6,7 @@ homepage: https://mrscraper.com/
 support_email: support@mrscraper.com
 ---
 
-# @mrscraper-com/sdk
+# @mrscraper/sdk
 ![](./mrscraper.jpeg)
 
 Official Node.js SDK for the [MrScraper](https://mrscraper.com) API.
@@ -16,7 +16,7 @@ Unblock pages, create and scale AI scrapers, manual scrapers, and retrieve resul
 It is stealth, reliable, and scalable.
 Every action is mirrored on our platform https://app.mrscraper.com
 
-[![npm version](https://img.shields.io/npm/v/@mrscraper-com/sdk)](https://www.npmjs.com/package/@mrscraper-com/sdk)
+[![npm version](https://img.shields.io/npm/v/@mrscraper/sdk)](https://www.npmjs.com/package/@mrscraper/sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
 ## Table of Contents
@@ -43,7 +43,7 @@ Every action is mirrored on our platform https://app.mrscraper.com
 ## Installation
 
 ```bash
-npm install @mrscraper-com/sdk
+npm install @mrscraper/sdk
 ```
 
 ## Requirements
@@ -65,7 +65,7 @@ Every function also accepts an optional `token` parameter to override the enviro
 ## Quick Start
 
 ```typescript
-import { fetchHtml, createAiScraper, getResultById, MrScraperError } from "@mrscraper-com/sdk";
+import { fetchHtml, createAiScraper, getResultById, MrScraperError } from "@mrscraper/sdk";
 
 try {
   // 1. Fetch raw HTML of a page
@@ -95,7 +95,7 @@ try {
 All functions throw a `MrScraperError` on failure — whether the error comes from the API (4xx/5xx), a network issue, or a timeout. You never need to check a return value; just wrap calls in `try/catch`.
 
 ```typescript
-import { MrScraperError } from "@mrscraper-com/sdk";
+import { MrScraperError } from "@mrscraper/sdk";
 
 try {
   const html = await fetchHtml({ url: "https://example.com" });
@@ -377,7 +377,7 @@ import type {
   ScraperAgent,
   SortField,
   SortOrder,
-} from "@mrscraper-com/sdk";
+} from "@mrscraper/sdk";
 ```
 
 ---
