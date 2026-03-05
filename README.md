@@ -1,11 +1,3 @@
----
-name: MrScraper Node SDK
-description: Run AI-powered, unblockable web scraping, data extraction with natural language using MrScraper Node SDK
-tags: [scraping, data-extraction, web-crawling, stealth-browser, web-automation]
-homepage: https://mrscraper.com/
-support_email: support@mrscraper.com
----
-
 # @mrscraper/sdk
 ![](./mrscraper.jpeg)
 
