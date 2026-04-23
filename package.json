@@ -1,7 +1,7 @@
 {
   "name": "@mrscraper/sdk",
   "version": "1.0.1",
-  "description": "Official Node.js SDK for the MrScraper API – fetch pages, run AI scrapers, rerun manual scrapers, and retrieve results.",
+  "description": "Official Node.js SDK for the MrScraper API – fetch pages, Google SERP sync, run AI scrapers, rerun manual scrapers, and retrieve results.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -20,11 +20,13 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist",
-    "prepublishOnly": "npm run clean && npm run build"
+    "prepublishOnly": "npm run clean && npm run build",
+    "test:serp": "npm run build && tsx tests/serp_test.ts"
   },
   "devDependencies": {
     "@types/node": "^25.3.3",
     "dotenv": "^17.3.1",
+    "tsx": "^4.19.4",
     "typescript": "^5.6.0"
   },
   "engines": {
