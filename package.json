@@ -1,6 +1,6 @@
 {
   "name": "@mrscraper/sdk",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Official Node.js SDK for the MrScraper API – fetch pages, Google SERP sync, run AI scrapers, rerun manual scrapers, and retrieve results.",
   "license": "MIT",
   "type": "module",
