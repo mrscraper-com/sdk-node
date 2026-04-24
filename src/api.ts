@@ -452,3 +452,50 @@ export async function getResultById<T = unknown>(
     600_000,
   );
 }
+
+// ---------------------------------------------------------------------------
+// 9. googleSerpSync
+// ---------------------------------------------------------------------------
+
+export interface GoogleSerpSyncOptions {
+  /** Full Google SERP URL (for example a `https://www.google.com/search?...` URL). */
+  url: string;
+  /**
+   * When true, the API returns a raw payload (for example unparsed HTML).
+   * Defaults to false.
+   */
+  raw?: boolean;
+  /** Override the global MRSCRAPER_API_TOKEN for this call. */
+  token?: string;
+  /** Request timeout in milliseconds. Defaults to 300000 (5 minutes). */
+  timeoutMs?: number;
+}
+
+/**
+ * Run a synchronous Google SERP scrape (`/api/google/serp/sync`).
+ * Uses Bearer authentication on the sync scraper host.
+ * Throws {@link MrScraperError} on API or network errors.
+ */
+export async function googleSerpSync<T = unknown>(
+  options: GoogleSerpSyncOptions,
+): Promise<T> {
+  const token = requireToken(options.token);
+  const timeoutMs = options.timeoutMs ?? 300_000;
+
+  return request<T>(
+    "https://sync.scraper.mrscraper.com/api/google/serp/sync",
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json",
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        url: options.url,
+        raw: options.raw ?? false,
+      }),
+    },
+    timeoutMs,
+  );
+}

@@ -27,6 +27,8 @@ Every action is mirrored on our platform https://app.mrscraper.com
   - [bulkRerunManualScraper](#bulkrerunmanualscraper)
   - [getAllResults](#getallresults)
   - [getResultById](#getresultbyid)
+  - [googleSerpSync](#googleserpsync)
+- [Trying the SDK locally](#trying-the-sdk-locally)
 - [TypeScript](#typescript)
 - [License](#license)
 
@@ -353,6 +355,48 @@ console.log(result);
 
 ---
 
+### `googleSerpSync`
+
+Calls the synchronous Google SERP endpoint on the sync scraper API. Authenticates with a **Bearer** token (same token as `MRSCRAPER_API_TOKEN`).
+
+```typescript
+import { googleSerpSync } from "@mrscraper/sdk";
+
+const data = await googleSerpSync({
+  url: "https://www.google.com/search?q=iphone+17", // required – full Google SERP URL
+  raw: true,                                         // optional – default: false
+  timeoutMs: 300_000,                                // optional – ms, default: 300000 (5 min)
+  token: "your_token",                               // optional – overrides MRSCRAPER_API_TOKEN
+});
+```
+
+**Options:**
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `url` | `string` | Yes | — | Full Google search URL to scrape |
+| `raw` | `boolean` | No | `false` | When true, returns a raw payload (for example HTML) from the API |
+| `timeoutMs` | `number` | No | `300000` | Overall request timeout in milliseconds |
+| `token` | `string` | No | — | Overrides the `MRSCRAPER_API_TOKEN` environment variable |
+
+**Returns:** `Promise<unknown>` — the API response (shape depends on `raw` and server version).
+
+---
+
+## Trying the SDK locally
+
+From a clone of this repository, build and run the Google SERP smoke script (requires `MRSCRAPER_API_TOKEN`):
+
+```bash
+export MRSCRAPER_API_TOKEN=your_token_here
+npm install
+npm run test:serp
+```
+
+The script prints a truncated response so long HTML does not flood the terminal.
+
+---
+
 ## TypeScript
 
 All option interfaces and shared types are exported for use in your own code:
@@ -367,6 +411,7 @@ import type {
   BulkRerunManualScraperOptions,
   GetAllResultsOptions,
   GetResultByIdOptions,
+  GoogleSerpSyncOptions,
   ScraperAgent,
   SortField,
   SortOrder,

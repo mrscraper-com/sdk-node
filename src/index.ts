@@ -8,6 +8,7 @@ export {
   bulkRerunManualScraper,
   getAllResults,
   getResultById,
+  googleSerpSync,
 } from "./api.js";
 
 export type {
@@ -22,4 +23,5 @@ export type {
   BulkRerunManualScraperOptions,
   GetAllResultsOptions,
   GetResultByIdOptions,
+  GoogleSerpSyncOptions,
 } from "./api.js";
