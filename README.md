@@ -27,7 +27,7 @@ Every action is mirrored on our platform https://app.mrscraper.com
   - [bulkRerunManualScraper](#bulkrerunmanualscraper)
   - [getAllResults](#getallresults)
   - [getResultById](#getresultbyid)
-  - [googleSerpSync](#googleserpsync)
+  - [googleSerp](#googleserp)
 - [Trying the SDK locally](#trying-the-sdk-locally)
 - [TypeScript](#typescript)
 - [License](#license)
@@ -355,14 +355,14 @@ console.log(result);
 
 ---
 
-### `googleSerpSync`
+### `googleSerp`
 
 Calls the synchronous Google SERP endpoint on the sync scraper API. Authenticates with a **Bearer** token (same token as `MRSCRAPER_API_TOKEN`).
 
 ```typescript
-import { googleSerpSync } from "@mrscraper/sdk";
+import { googleSerp } from "@mrscraper/sdk";
 
-const data = await googleSerpSync({
+const data = await googleSerp({
   url: "https://www.google.com/search?q=iphone+17", // required – full Google SERP URL
   raw: true,                                         // optional – default: false
   timeoutMs: 300_000,                                // optional – ms, default: 300000 (5 min)
@@ -411,7 +411,7 @@ import type {
   BulkRerunManualScraperOptions,
   GetAllResultsOptions,
   GetResultByIdOptions,
-  GoogleSerpSyncOptions,
+  GoogleSerpOptions,
   ScraperAgent,
   SortField,
   SortOrder,

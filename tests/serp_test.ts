@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { googleSerpSync, MrScraperError } from "../dist/index.js";
+import { googleSerp, MrScraperError } from "../dist/index.js";
 
 if (!process.env.MRSCRAPER_API_TOKEN) {
   console.error("Set MRSCRAPER_API_TOKEN (see README Authentication).");
@@ -7,7 +7,7 @@ if (!process.env.MRSCRAPER_API_TOKEN) {
 }
 
 try {
-  const data = await googleSerpSync({
+  const data = await googleSerp({
     url: "https://www.google.com/search?q=iphone+17",
     raw: true,
     token: process.env.MRSCRAPER_API_TOKEN,

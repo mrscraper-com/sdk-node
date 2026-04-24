@@ -454,10 +454,10 @@ export async function getResultById<T = unknown>(
 }
 
 // ---------------------------------------------------------------------------
-// 9. googleSerpSync
+// 9. googleSerp
 // ---------------------------------------------------------------------------
 
-export interface GoogleSerpSyncOptions {
+export interface GoogleSerpOptions {
   /** Full Google SERP URL (for example a `https://www.google.com/search?...` URL). */
   url: string;
   /**
@@ -476,8 +476,8 @@ export interface GoogleSerpSyncOptions {
  * Uses Bearer authentication on the sync scraper host.
  * Throws {@link MrScraperError} on API or network errors.
  */
-export async function googleSerpSync<T = unknown>(
-  options: GoogleSerpSyncOptions,
+export async function googleSerp<T = unknown>(
+  options: GoogleSerpOptions,
 ): Promise<T> {
   const token = requireToken(options.token);
   const timeoutMs = options.timeoutMs ?? 300_000;
