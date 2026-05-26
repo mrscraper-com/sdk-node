@@ -287,6 +287,14 @@ export async function bulkRerunAiScraper<T = unknown>(
 // 5. rerunManualScraper
 // ---------------------------------------------------------------------------
 
+/**
+ * **WARNING:** Scraping login-protected pages carries serious legal and compliance risks.
+ * Many websites explicitly prohibit automated access in their Terms of Service, and bypassing
+ * authentication to scrape content may expose you to legal action including lawsuits, account
+ * termination, and financial penalties. By proceeding on scraping login-protected pages, you
+ * confirm that you have read and understood the target website's Terms of Service, and you
+ * **fully accept all legal, financial, and ethical responsibility** for your actions.
+ */
 export interface RerunManualScraperOptions {
   /** The ID of the manual scraper to rerun. */
   scraperId: string;
@@ -297,6 +305,13 @@ export interface RerunManualScraperOptions {
 }
 
 /**
+ * **WARNING:** Scraping login-protected pages carries serious legal and compliance risks.
+ * Many websites explicitly prohibit automated access in their Terms of Service, and bypassing
+ * authentication to scrape content may expose you to legal action including lawsuits, account
+ * termination, and financial penalties. By proceeding on scraping login-protected pages, you
+ * confirm that you have read and understood the target website's Terms of Service, and you
+ * **fully accept all legal, financial, and ethical responsibility** for your actions.
+ *
  * Rerun a manual (dashboard-configured) scraper on a URL.
  * Throws {@link MrScraperError} on API or network errors.
  */
@@ -324,6 +339,14 @@ export async function rerunManualScraper<T = unknown>(
 // 6. bulkRerunManualScraper
 // ---------------------------------------------------------------------------
 
+/**
+ * **WARNING:** Scraping login-protected pages carries serious legal and compliance risks.
+ * Many websites explicitly prohibit automated access in their Terms of Service, and bypassing
+ * authentication to scrape content may expose you to legal action including lawsuits, account
+ * termination, and financial penalties. By proceeding on scraping login-protected pages, you
+ * confirm that you have read and understood the target website's Terms of Service, and you
+ * **fully accept all legal, financial, and ethical responsibility** for your actions.
+ */
 export interface BulkRerunManualScraperOptions {
   /** The ID of the manual scraper to rerun. */
   scraperId: string;
@@ -334,6 +357,13 @@ export interface BulkRerunManualScraperOptions {
 }
 
 /**
+ * **WARNING:** Scraping login-protected pages carries serious legal and compliance risks.
+ * Many websites explicitly prohibit automated access in their Terms of Service, and bypassing
+ * authentication to scrape content may expose you to legal action including lawsuits, account
+ * termination, and financial penalties. By proceeding on scraping login-protected pages, you
+ * confirm that you have read and understood the target website's Terms of Service, and you
+ * **fully accept all legal, financial, and ethical responsibility** for your actions.
+ *
  * Rerun a manual scraper on multiple URLs at once.
  * Throws {@link MrScraperError} on API or network errors.
  */
