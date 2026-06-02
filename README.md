@@ -179,9 +179,9 @@ const scraper = await createAiScraper({
 | `message` | `string` | No | `""` | Natural-language instructions (general/listing agents) |
 | `agent` | `"general" \| "listing" \| "map"` | No | `"general"` | Agent type |
 | `proxyCountry` | `string \| null` | No | — | Two-letter proxy country code (general/listing) |
-| `maxDepth` | `number` | No | `2` | Max crawl depth, 0–5 (map agent) |
-| `maxPages` | `number` | No | `50` | Max pages to crawl, 1–1000 (map agent) |
-| `limit` | `number` | No | `1000` | Max results to return, 1–100000 (map agent) |
+| `maxDepth` | `number` | No | `2` | Max crawl depth (map agent) |
+| `maxPages` | `number` | No | `50` | Max pages to crawl (map agent) |
+| `limit` | `number` | No | `1000` | Max results to return (map agent) |
 | `includePatterns` | `string` | No | `""` | URL patterns to include (map agent) |
 | `excludePatterns` | `string` | No | `""` | URL patterns to exclude (map agent) |
 | `token` | `string` | No | — | Overrides the `MRSCRAPER_API_TOKEN` environment variable |
@@ -212,11 +212,11 @@ const result = await rerunAiScraper({
 |-----------|------|----------|---------|-------------|
 | `scraperId` | `string` | Yes | — | ID of the AI scraper to rerun |
 | `url` | `string` | Yes | — | New URL to scrape |
-| `maxDepth` | `number` | No | `2` | Max crawl depth (0–5) |
-| `maxPages` | `number` | No | `50` | Max pages (1–1000) |
-| `limit` | `number` | No | `1000` | Max results (1–100000) |
-| `includePatterns` | `string` | No | `""` | URL patterns to include |
-| `excludePatterns` | `string` | No | `""` | URL patterns to exclude |
+| `maxDepth` | `number` | No | `2` | Max crawl depth (map agent) |
+| `maxPages` | `number` | No | `50` | Max pages to process (map and listing agent) |
+| `limit` | `number` | No | `1000` | Max results limit (map agent) |
+| `includePatterns` | `string` | No | `""` | URL patterns to include (map agent) |
+| `excludePatterns` | `string` | No | `""` | URL patterns to exclude (map agent) |
 | `token` | `string` | No | — | Overrides the `MRSCRAPER_API_TOKEN` environment variable |
 
 **Returns:** `Promise<unknown>` — the API response object.
