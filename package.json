@@ -1,7 +1,7 @@
 {
   "name": "@mrscraper/sdk",
-  "version": "1.1.4",
-  "description": "Official Node.js SDK for the MrScraper API – fetch pages, Google SERP, run AI scrapers, rerun manual scrapers, and retrieve results.",
+  "version": "2.0.0",
+  "description": "Official Node.js SDK for MrScraper content fetching and Google SERP.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -15,18 +15,17 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "mrscraper.jpeg"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build",
-    "test:serp": "npm run build && tsx tests/serp_test.ts"
+    "test": "npm run build && node --test tests/*.test.mjs"
   },
   "devDependencies": {
     "@types/node": "^25.3.3",
-    "dotenv": "^17.3.1",
-    "tsx": "^4.19.4",
     "typescript": "^5.6.0"
   },
   "engines": {
@@ -42,7 +41,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/mrscraper-com/sdk-node.git"
+    "url": "git+https://github.com/mrscraper-com/sdk-node.git"
   },
   "homepage": "https://mrscraper.com"
 }

@@ -1,27 +1,2 @@
-export {
-  MrScraperError,
-  fetchHtml,
-  createAiScraper,
-  rerunAiScraper,
-  bulkRerunAiScraper,
-  rerunManualScraper,
-  bulkRerunManualScraper,
-  getAllResults,
-  getResultById,
-  googleSerp,
-} from "./api.js";
-
-export type {
-  ScraperAgent,
-  SortField,
-  SortOrder,
-  FetchHtmlOptions,
-  CreateAiScraperOptions,
-  RerunAiScraperOptions,
-  BulkRerunAiScraperOptions,
-  RerunManualScraperOptions,
-  BulkRerunManualScraperOptions,
-  GetAllResultsOptions,
-  GetResultByIdOptions,
-  GoogleSerpOptions,
-} from "./api.js";
+export { MrScraperError, fetch_content, google_serp } from "./api.js";
+export type { FetchContentOptions, GoogleSerpOptions, MrScraperResponse } from "./api.js";
