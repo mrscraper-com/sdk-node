@@ -1,2 +1,2 @@
-export { MrScraperError, fetch_content, google_serp } from "./api.js";
-export type { FetchContentOptions, GoogleSerpOptions, MrScraperResponse } from "./api.js";
+export { MrScraperError, scraper_api, web_search } from "./api.js";
+export type { ScraperApiOptions, WebSearchOptions, MrScraperResponse } from "./api.js";

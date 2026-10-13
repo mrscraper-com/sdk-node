@@ -15,7 +15,7 @@ export interface MrScraperResponse<T = unknown> {
   headers: Record<string, string>;
 }
 
-export interface FetchContentOptions {
+export interface ScraperApiOptions {
   /** Overrides MRSCRAPER_API_TOKEN for this call. */
   token?: string;
   html?: boolean;
@@ -42,7 +42,7 @@ export interface FetchContentOptions {
   discard_token_secret?: string;
 }
 
-export interface GoogleSerpOptions {
+export interface WebSearchOptions {
   /** Overrides MRSCRAPER_API_TOKEN for this call. */
   token?: string;
   /** Compatibility flag: true requests HTML even when format is "json". */
@@ -125,10 +125,10 @@ async function post<T>(
   }
 }
 
-/** Fetch a page through the MrScraper API. Options mirror Python's fetch_content. */
-export async function fetch_content<T = unknown>(
+/** Fetch a page through the MrScraper API. Options mirror the Python client's page-fetch options. */
+export async function scraper_api<T = unknown>(
   url: string,
-  options: FetchContentOptions = {},
+  options: ScraperApiOptions = {},
 ): Promise<MrScraperResponse<T>> {
   const token = requireToken(options.token);
   const timeout = options.timeout ?? 120;
@@ -210,9 +210,9 @@ function normalizeSerpInput(input: string): {
 }
 
 /** Fetch Google search results. Accepts query text or a Google search URL. */
-export async function google_serp<T = unknown>(
+export async function web_search<T = unknown>(
   url: string,
-  options: GoogleSerpOptions = {},
+  options: WebSearchOptions = {},
 ): Promise<MrScraperResponse<T>> {
   const token = requireToken(options.token);
   const format = options.format ?? "json";

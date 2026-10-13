@@ -13,14 +13,27 @@ export MRSCRAPER_API_TOKEN="YOUR_TOKEN"
 
 The SDK reads `MRSCRAPER_API_TOKEN` automatically. You can instead pass `token` in either call's options object. Both functions are async and return `{ status_code, data, headers }`. JSON responses are parsed; other responses are returned as text in `data`.
 
-**Version 2 migration:** This release removes `fetchHtml`, `googleSerp`, and all AI scraper, manual scraper, and results methods. Use `fetch_content(url, options)` and `google_serp(queryOrUrl, options)`. Both functions now return a response wrapper instead of only the API payload.
+## Version 3 migration
+
+Version 3 renames the public functions and their option types. Update your imports and calls:
+
+| Version 2 | Version 3 |
+|-----------|-----------|
+| `fetch_content(url, options)` | `scraper_api(url, options)` |
+| `google_serp(queryOrUrl, options)` | `web_search(queryOrUrl, options)` |
+| `FetchContentOptions` | `ScraperApiOptions` |
+| `GoogleSerpOptions` | `WebSearchOptions` |
+
+The version 2 names are no longer exported. Request options, API endpoints, and the `{ status_code, data, headers }` response wrapper are unchanged.
+
+If upgrading from version 1, `fetchHtml`, `googleSerp`, and all AI scraper, manual scraper, and results methods were removed in version 2. Use the version 3 functions above; they return a response wrapper instead of only the API payload.
 
 ## Fetch content
 
 ```typescript
-import { fetch_content } from "@mrscraper/sdk";
+import { scraper_api } from "@mrscraper/sdk";
 
-const result = await fetch_content("https://example.com", {
+const result = await scraper_api("https://example.com", {
   html: true,
   markdown: true,
   screenshot: true,
@@ -29,7 +42,7 @@ const result = await fetch_content("https://example.com", {
 console.log(result.status_code, result.data);
 ```
 
-`fetch_content` sends `POST https://api.mrscraper.com/`. The JSON body contains `url`, `maxRetries`, and optional `tokenCap`. Page settings and the token are URL query parameters. Setting `screenshot: true` also sends `browserRendering=true`, even if `browser_rendering` is false.
+`scraper_api` sends `POST https://api.mrscraper.com/`. The JSON body contains `url`, `maxRetries`, and optional `tokenCap`. Page settings and the token are URL query parameters. Setting `screenshot: true` also sends `browserRendering=true`, even if `browser_rendering` is false.
 
 | Option | Default | Description |
 |--------|---------|-------------|
@@ -52,12 +65,12 @@ console.log(result.status_code, result.data);
 
 Unset optional query parameters are omitted. Explicit `false`, `0`, and empty strings are preserved where the Python client sends them.
 
-## Google SERP
+## Web search
 
 ```typescript
-import { google_serp } from "@mrscraper/sdk";
+import { web_search } from "@mrscraper/sdk";
 
-const result = await google_serp("python web scraping", {
+const result = await web_search("python web scraping", {
   raw: false,
   region: "us",
   language: "en",
@@ -67,7 +80,7 @@ const result = await google_serp("python web scraping", {
 console.log(result.data);
 ```
 
-`google_serp` sends `POST https://sync.scraper.mrscraper.com/api/google/serp/v2/sync`. The first argument may be query text or a Google search URL. For a URL, the SDK extracts `q`, `gl`, `hl`, and `start`; explicit options override the extracted region, language, and page. `raw: true` is the default and requests HTML regardless of `format`. Set `raw: false` to use `format`.
+`web_search` sends `POST https://sync.scraper.mrscraper.com/api/google/serp/v2/sync`. The first argument may be query text or a Google search URL. For a URL, the SDK extracts `q`, `gl`, `hl`, and `start`; explicit options override the extracted region, language, and page. `raw: true` is the default and requests HTML regardless of `format`. Set `raw: false` to use `format`.
 
 | Option | Default | Description |
 |--------|---------|-------------|
@@ -85,11 +98,11 @@ console.log(result.data);
 Both functions reject with `MrScraperError` for API, authentication, network, and timeout errors. `status` contains the HTTP status for API errors and is `undefined` for network errors. Invalid options throw `TypeError` or `RangeError`.
 
 ```typescript
-import { fetch_content, MrScraperError } from "@mrscraper/sdk";
-import type { FetchContentOptions, GoogleSerpOptions, MrScraperResponse } from "@mrscraper/sdk";
+import { scraper_api, MrScraperError } from "@mrscraper/sdk";
+import type { ScraperApiOptions, WebSearchOptions, MrScraperResponse } from "@mrscraper/sdk";
 
 try {
-  const result: MrScraperResponse = await fetch_content("https://example.com");
+  const result: MrScraperResponse = await scraper_api("https://example.com");
   console.log(result.data);
 } catch (error) {
   if (error instanceof MrScraperError) {
@@ -109,6 +122,32 @@ npm run build
 ```
 
 `npm test` uses mocked HTTP responses and does not require an API token.
+
+## Publish manually to npm
+
+Version `3.0.0` is a major release because the public API names changed. Both `package.json` and `package-lock.json` already contain this version.
+
+From the repository root, verify the package before publishing:
+
+```bash
+npm ci
+npm test
+npm publish --dry-run --access public
+```
+
+Review the dry-run file list, then log in with an npm account that has publishing access to `@mrscraper/sdk`:
+
+```bash
+npm login
+npm whoami
+npm publish --access public
+npm view @mrscraper/sdk@3.0.0 version
+npm view @mrscraper/sdk dist-tags --json
+```
+
+Complete npm's browser login and two-factor authentication prompts. The `prepublishOnly` script cleans and rebuilds `dist` before publishing. A successful publish makes `3.0.0` available under the `latest` tag by default. Each package version can only be published once.
+
+See npm's [scoped package publishing guide](https://docs.npmjs.com/creating-and-publishing-scoped-public-packages/) and [semantic versioning guide](https://docs.npmjs.com/about-semantic-versioning/).
 
 ## License
 
