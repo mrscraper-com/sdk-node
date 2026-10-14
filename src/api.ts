@@ -1,12 +1,6 @@
-import { URL, URLSearchParams } from "node:url";
-
-// ---------------------------------------------------------------------------
-// Error class
-// ---------------------------------------------------------------------------
-
+/** An API, authentication, network, or timeout failure. */
 export class MrScraperError extends Error {
-  /** HTTP status code, if the error came from the API. Undefined for network/timeout errors. */
-  public readonly status: number | undefined;
+  readonly status: number | undefined;
 
   constructor(message: string, status?: number) {
     super(message);
@@ -15,517 +9,241 @@ export class MrScraperError extends Error {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Shared types
-// ---------------------------------------------------------------------------
+export interface MrScraperResponse<T = unknown> {
+  status_code: number;
+  data: T;
+  headers: Record<string, string>;
+}
 
-export type ScraperAgent = "general" | "listing" | "map";
+export interface ScraperApiOptions {
+  /** Overrides MRSCRAPER_API_TOKEN for this call. */
+  token?: string;
+  html?: boolean;
+  markdown?: boolean;
+  /** Page timeout in seconds, from 1 to 300. */
+  timeout?: number;
+  geo_code?: string;
+  proxy_country?: string | null;
+  block_resources?: boolean | null;
+  browser_rendering?: boolean | null;
+  super?: boolean;
+  use_proxy?: boolean;
+  proxy?: string | null;
+  wait_for_selector?: string | null;
+  home_page?: boolean;
+  screenshot?: boolean;
+  bypass_proxy?: boolean;
+  cookie_jar?: string | null;
+  /** Headers forwarded to the target site, not the API request. */
+  headers?: Record<string, string> | string | null;
+  max_retries?: number;
+  token_cap?: number | null;
+  stream?: boolean | null;
+  discard_token_secret?: string;
+}
 
-export type SortField =
-  | "createdAt"
-  | "updatedAt"
-  | "id"
-  | "type"
-  | "url"
-  | "status"
-  | "error"
-  | "tokenUsage"
-  | "runtime";
-
-export type SortOrder = "ASC" | "DESC";
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
+export interface WebSearchOptions {
+  /** Overrides MRSCRAPER_API_TOKEN for this call. */
+  token?: string;
+  /** Compatibility flag: true requests HTML even when format is "json". */
+  raw?: boolean;
+  region?: string | null;
+  language?: string | null;
+  page?: number | null;
+  format?: "json" | "html";
+  render_js?: boolean;
+  /** HTTP request timeout in seconds. */
+  timeout?: number;
+}
 
 function requireToken(explicitToken?: string): string {
-  const token = explicitToken ?? process.env.MRSCRAPER_API_TOKEN;
-  if (!token) {
+  const token = explicitToken || process.env.MRSCRAPER_API_TOKEN || "";
+  if (!token.trim()) {
     throw new MrScraperError(
-      "Missing API token. Pass it as an argument or set the MRSCRAPER_API_TOKEN environment variable. Get your token at https://app.mrscraper.com.",
+      "API token is not set. Pass token in the options or set MRSCRAPER_API_TOKEN. Get your token at https://app.mrscraper.com.",
     );
   }
   return token;
 }
 
-async function request<T>(
-  url: string,
-  init: RequestInit,
-  timeoutMs: number,
-): Promise<T> {
-  const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), timeoutMs);
+function authHeaders(token: string): Record<string, string> {
+  return {
+    "Content-Type": "application/json",
+    accept: "application/json",
+    Authorization: `Bearer ${token}`,
+    "x-api-token": token,
+  };
+}
 
-  try {
-    const res = await fetch(url, { ...init, signal: controller.signal });
-
-    const contentType = res.headers.get("content-type")?.toLowerCase() ?? "";
-    const data = contentType.includes("application/json")
-      ? await res.json()
-      : await res.text();
-
-    if (res.status === 401) {
-      throw new MrScraperError("Unauthorized or invalid API token.", 401);
-    }
-
-    if (!res.ok) {
-      const message = typeof data === "string" ? data : JSON.stringify(data);
-      throw new MrScraperError(message, res.status);
-    }
-
-    return data as T;
-  } catch (e: unknown) {
-    if (e instanceof MrScraperError) throw e;
-    throw new MrScraperError((e as Error)?.message ?? String(e));
-  } finally {
-    clearTimeout(t);
+function setIfPresent(params: URLSearchParams, key: string, value: unknown): void {
+  if (value !== null && value !== undefined) {
+    params.set(key, typeof value === "boolean" ? String(value) : String(value));
   }
 }
 
-// ---------------------------------------------------------------------------
-// 1. fetchHtml
-// ---------------------------------------------------------------------------
-
-export interface FetchHtmlOptions {
-  /** The URL to fetch. */
-  url: string;
-  /** Request timeout in seconds (1–600). Defaults to 120. */
-  timeout?: number;
-  /** Two-letter ISO country code for geo-targeting. Defaults to "US". */
-  geoCode?: string;
-  /** Block images/fonts/css to speed up the request. Defaults to false. */
-  blockResources?: boolean;
-  /** Override the global MRSCRAPER_API_TOKEN for this call. */
-  token?: string;
-}
-
-/**
- * Fetch the raw HTML (or JSON) of any URL through MrScraper's Fetch endpoint.
- * Throws {@link MrScraperError} on API or network errors.
- */
-export async function fetchHtml<T = string>(options: FetchHtmlOptions): Promise<T> {
-  const token = requireToken(options.token);
-  const timeoutSecs = options.timeout ?? 120;
-
-  const params = new URLSearchParams({
-    token,
-    timeout: String(timeoutSecs),
-    geoCode: options.geoCode ?? "US",
-    url: options.url,
-    blockResources: String(!!options.blockResources),
-  });
-
-  const base = new URL("https://api.mrscraper.com/");
-  base.search = params.toString();
-
-  return request<T>(base.toString(), {}, (timeoutSecs + 30) * 1000);
-}
-
-// ---------------------------------------------------------------------------
-// 2. createAiScraper
-// ---------------------------------------------------------------------------
-
-export interface CreateAiScraperOptions {
-  /** The starting URL to scrape. */
-  url: string;
-  /** Natural-language instructions for the AI (general/listing agents). */
-  message?: string;
-  /** Scraper agent type. Defaults to "general". */
-  agent?: ScraperAgent;
-  /** Two-letter proxy country code (general/listing agents). */
-  proxyCountry?: string | null;
-  /** Maximum crawl depth for map agent (0–5). Defaults to 2. */
-  maxDepth?: number;
-  /** Maximum pages for map agent (1–1000). Defaults to 50. */
-  maxPages?: number;
-  /** Maximum results for map agent (1–100000). Defaults to 1000. */
-  limit?: number;
-  /** URL patterns to include (map agent). */
-  includePatterns?: string;
-  /** URL patterns to exclude (map agent). */
-  excludePatterns?: string;
-  /** Override the global MRSCRAPER_API_TOKEN for this call. */
-  token?: string;
-}
-
-/**
- * Create a new AI scraper (general, listing, or map).
- * Throws {@link MrScraperError} on API or network errors.
- */
-export async function createAiScraper<T = unknown>(
-  options: CreateAiScraperOptions,
-): Promise<T> {
-  const token = requireToken(options.token);
-  const agent = options.agent ?? "general";
-
-  const body =
-    agent === "map"
-      ? {
-          url: options.url,
-          agent,
-          maxDepth: options.maxDepth ?? 2,
-          maxPages: options.maxPages ?? 50,
-          limit: options.limit ?? 1000,
-          includePatterns: options.includePatterns ?? "",
-          excludePatterns: options.excludePatterns ?? "",
-        }
-      : {
-          url: options.url,
-          message: options.message ?? "",
-          agent,
-          proxyCountry: options.proxyCountry ?? null,
-        };
-
-  return request<T>(
-    "https://api.app.mrscraper.com/api/v1/scrapers-ai",
-    {
+async function post<T>(
+  url: string,
+  body: Record<string, unknown>,
+  headers: Record<string, string>,
+  timeoutSeconds: number,
+  token: string,
+): Promise<MrScraperResponse<T>> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutSeconds * 1000);
+  try {
+    const response = await fetch(url, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json",
-        "x-api-token": token,
-      },
+      headers,
       body: JSON.stringify(body),
-    },
-    600_000,
-  );
+      signal: controller.signal,
+    });
+    if (response.status === 401) {
+      throw new MrScraperError(
+        "Unauthorized or invalid token. Please go to https://app.mrscraper.com to get your token.",
+        401,
+      );
+    }
+    const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+    const data = contentType.includes("application/json")
+      ? await response.json()
+      : await response.text();
+    if (!response.ok) {
+      const message = typeof data === "string" ? data : JSON.stringify(data);
+      throw new MrScraperError(message.replaceAll(token, "[REDACTED]"), response.status);
+    }
+    return {
+      status_code: response.status,
+      data: data as T,
+      headers: Object.fromEntries(response.headers.entries()),
+    };
+  } catch (error) {
+    if (error instanceof MrScraperError) throw error;
+    const message = error instanceof Error ? error.message : String(error);
+    throw new MrScraperError(message.replaceAll(token, "[REDACTED]"));
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
-// ---------------------------------------------------------------------------
-// 3. rerunAiScraper
-// ---------------------------------------------------------------------------
-
-export interface RerunAiScraperOptions {
-  /** The ID of the AI scraper to rerun. */
-  scraperId: string;
-  /** New URL to scrape. */
-  url: string;
-  /** Maximum crawl depth (0–5). Defaults to 2. */
-  maxDepth?: number;
-  /** Maximum pages (1–1000). Defaults to 50. */
-  maxPages?: number;
-  /** Maximum results (1–100000). Defaults to 1000. */
-  limit?: number;
-  /** URL patterns to include. */
-  includePatterns?: string;
-  /** URL patterns to exclude. */
-  excludePatterns?: string;
-  /** Override the global MRSCRAPER_API_TOKEN for this call. */
-  token?: string;
-}
-
-/**
- * Rerun an existing AI scraper on a new URL.
- * Throws {@link MrScraperError} on API or network errors.
- */
-export async function rerunAiScraper<T = unknown>(
-  options: RerunAiScraperOptions,
-): Promise<T> {
+/** Fetch a page through the MrScraper API. Options mirror the Python client's page-fetch options. */
+export async function scraper_api<T = unknown>(
+  url: string,
+  options: ScraperApiOptions = {},
+): Promise<MrScraperResponse<T>> {
   const token = requireToken(options.token);
+  const timeout = options.timeout ?? 120;
+  const maxRetries = options.max_retries ?? 3;
+  if (!Number.isFinite(timeout) || timeout < 1 || timeout > 300) {
+    throw new RangeError("timeout must be between 1 and 300 seconds");
+  }
+  if (!Number.isInteger(maxRetries) || maxRetries < 0) {
+    throw new RangeError("max_retries must be greater than or equal to 0");
+  }
+  if (options.token_cap != null && (!Number.isInteger(options.token_cap) || options.token_cap < 0)) {
+    throw new RangeError("token_cap must be greater than or equal to 0");
+  }
+  if (options.screenshot !== undefined && typeof options.screenshot !== "boolean") {
+    throw new TypeError("screenshot must be a boolean");
+  }
+  if (options.super !== undefined && typeof options.super !== "boolean") {
+    throw new TypeError("super must be a boolean");
+  }
 
-  return request<T>(
-    "https://api.app.mrscraper.com/api/v1/scrapers-ai-rerun",
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json",
-        "x-api-token": token,
-      },
-      body: JSON.stringify({
-        scraperId: options.scraperId,
-        url: options.url,
-        maxDepth: options.maxDepth ?? 2,
-        maxPages: options.maxPages ?? 50,
-        limit: options.limit ?? 1000,
-        includePatterns: options.includePatterns ?? "",
-        excludePatterns: options.excludePatterns ?? "",
-      }),
-    },
-    600_000,
+  const params = new URLSearchParams();
+  setIfPresent(params, "token", token);
+  setIfPresent(params, "timeout", timeout);
+  setIfPresent(params, "geoCode", options.geo_code ?? "US");
+  setIfPresent(params, "proxyCountry", options.proxy_country);
+  setIfPresent(params, "browserRendering", options.screenshot ? true : options.browser_rendering);
+  setIfPresent(params, "super", options.super ? true : null);
+  setIfPresent(params, "useProxy", options.use_proxy === false ? false : null);
+  setIfPresent(params, "proxy", options.proxy);
+  setIfPresent(params, "html", options.html ?? true);
+  setIfPresent(params, "markdown", options.markdown ?? false);
+  setIfPresent(params, "waitForSelector", options.wait_for_selector);
+  setIfPresent(params, "warmStart", options.home_page ? true : null);
+  setIfPresent(params, "screenshot", options.screenshot ? true : null);
+  setIfPresent(params, "blockResources", options.block_resources ? true : null);
+  setIfPresent(params, "bypassProxy", options.bypass_proxy ? true : null);
+  setIfPresent(params, "cookieJar", options.cookie_jar);
+  setIfPresent(
+    params,
+    "headers",
+    typeof options.headers === "object" && options.headers !== null
+      ? JSON.stringify(options.headers)
+      : options.headers,
   );
+  setIfPresent(params, "stream", options.stream);
+
+  const headers = authHeaders(token);
+  if (options.discard_token_secret) {
+    headers["x-discard-token-secret"] = options.discard_token_secret;
+  }
+  const body: Record<string, unknown> = { url, maxRetries };
+  if (options.token_cap != null) body.tokenCap = options.token_cap;
+
+  return post<T>(`https://api.mrscraper.com/?${params}`, body, headers, timeout + 30, token);
 }
 
-// ---------------------------------------------------------------------------
-// 4. bulkRerunAiScraper
-// ---------------------------------------------------------------------------
-
-export interface BulkRerunAiScraperOptions {
-  /** The ID of the AI scraper to rerun. */
-  scraperId: string;
-  /** List of URLs to scrape. */
-  urls: string[];
-  /** Override the global MRSCRAPER_API_TOKEN for this call. */
-  token?: string;
+function normalizeSerpInput(input: string): {
+  query: string;
+  region: string | null;
+  language: string | null;
+  page: number | null;
+} {
+  const value = input.trim();
+  if (!value) throw new TypeError("A Google search query or URL is required");
+  if (!/^https?:\/\//i.test(value)) {
+    return { query: value, region: null, language: null, page: null };
+  }
+  const parsed = new URL(value);
+  const query = (parsed.searchParams.get("q") ?? "").trim();
+  if (!query) throw new TypeError("Google search URL must contain a q parameter");
+  const startValue = (parsed.searchParams.get("start") ?? "0").trim();
+  const start = /^[+-]?\d+$/.test(startValue) ? Number(startValue) : 0;
+  return {
+    query,
+    region: parsed.searchParams.get("gl"),
+    language: parsed.searchParams.get("hl"),
+    page: start > 0 ? Math.floor(start / 10) + 1 : null,
+  };
 }
 
-/**
- * Rerun an AI scraper on multiple URLs at once.
- * Throws {@link MrScraperError} on API or network errors.
- */
-export async function bulkRerunAiScraper<T = unknown>(
-  options: BulkRerunAiScraperOptions,
-): Promise<T> {
+/** Fetch Google search results. Accepts query text or a Google search URL. */
+export async function web_search<T = unknown>(
+  url: string,
+  options: WebSearchOptions = {},
+): Promise<MrScraperResponse<T>> {
   const token = requireToken(options.token);
+  const format = options.format ?? "json";
+  if (format !== "json" && format !== "html") {
+    throw new TypeError("format must be 'json' or 'html'");
+  }
+  if (options.page != null && (!Number.isInteger(options.page) || options.page < 1)) {
+    throw new RangeError("page must be a positive integer");
+  }
+  const timeout = options.timeout ?? 600;
+  if (!Number.isFinite(timeout) || timeout <= 0) {
+    throw new RangeError("timeout must be greater than 0 seconds");
+  }
+  const normalized = normalizeSerpInput(url);
+  const body: Record<string, unknown> = {
+    query: normalized.query,
+    format: (options.raw ?? true) ? "html" : format,
+    renderJs: Boolean(options.render_js ?? false),
+  };
+  const region = options.region || normalized.region;
+  const language = options.language || normalized.language;
+  const page = options.page || normalized.page;
+  if (region != null) body.region = region;
+  if (language != null) body.language = language;
+  if (page != null) body.page = page;
 
-  return request<T>(
-    "https://api.app.mrscraper.com/api/v1/scrapers-ai-rerun/bulk",
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json",
-        "x-api-token": token,
-      },
-      body: JSON.stringify({ scraperId: options.scraperId, urls: options.urls }),
-    },
-    600_000,
-  );
-}
-
-// ---------------------------------------------------------------------------
-// 5. rerunManualScraper
-// ---------------------------------------------------------------------------
-
-/**
- * **WARNING:** Scraping login-protected pages carries serious legal and compliance risks.
- * Many websites explicitly prohibit automated access in their Terms of Service, and bypassing
- * authentication to scrape content may expose you to legal action including lawsuits, account
- * termination, and financial penalties. By proceeding on scraping login-protected pages, you
- * confirm that you have read and understood the target website's Terms of Service, and you
- * **fully accept all legal, financial, and ethical responsibility** for your actions.
- */
-export interface RerunManualScraperOptions {
-  /** The ID of the manual scraper to rerun. */
-  scraperId: string;
-  /** URL to scrape. */
-  url: string;
-  /** Override the global MRSCRAPER_API_TOKEN for this call. */
-  token?: string;
-}
-
-/**
- * **WARNING:** Scraping login-protected pages carries serious legal and compliance risks.
- * Many websites explicitly prohibit automated access in their Terms of Service, and bypassing
- * authentication to scrape content may expose you to legal action including lawsuits, account
- * termination, and financial penalties. By proceeding on scraping login-protected pages, you
- * confirm that you have read and understood the target website's Terms of Service, and you
- * **fully accept all legal, financial, and ethical responsibility** for your actions.
- *
- * Rerun a manual (dashboard-configured) scraper on a URL.
- * Throws {@link MrScraperError} on API or network errors.
- */
-export async function rerunManualScraper<T = unknown>(
-  options: RerunManualScraperOptions,
-): Promise<T> {
-  const token = requireToken(options.token);
-
-  return request<T>(
-    "https://api.app.mrscraper.com/api/v1/scrapers-manual-rerun",
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json",
-        "x-api-token": token,
-      },
-      body: JSON.stringify({ scraperId: options.scraperId, url: options.url }),
-    },
-    600_000,
-  );
-}
-
-// ---------------------------------------------------------------------------
-// 6. bulkRerunManualScraper
-// ---------------------------------------------------------------------------
-
-/**
- * **WARNING:** Scraping login-protected pages carries serious legal and compliance risks.
- * Many websites explicitly prohibit automated access in their Terms of Service, and bypassing
- * authentication to scrape content may expose you to legal action including lawsuits, account
- * termination, and financial penalties. By proceeding on scraping login-protected pages, you
- * confirm that you have read and understood the target website's Terms of Service, and you
- * **fully accept all legal, financial, and ethical responsibility** for your actions.
- */
-export interface BulkRerunManualScraperOptions {
-  /** The ID of the manual scraper to rerun. */
-  scraperId: string;
-  /** List of URLs to scrape. */
-  urls: string[];
-  /** Override the global MRSCRAPER_API_TOKEN for this call. */
-  token?: string;
-}
-
-/**
- * **WARNING:** Scraping login-protected pages carries serious legal and compliance risks.
- * Many websites explicitly prohibit automated access in their Terms of Service, and bypassing
- * authentication to scrape content may expose you to legal action including lawsuits, account
- * termination, and financial penalties. By proceeding on scraping login-protected pages, you
- * confirm that you have read and understood the target website's Terms of Service, and you
- * **fully accept all legal, financial, and ethical responsibility** for your actions.
- *
- * Rerun a manual scraper on multiple URLs at once.
- * Throws {@link MrScraperError} on API or network errors.
- */
-export async function bulkRerunManualScraper<T = unknown>(
-  options: BulkRerunManualScraperOptions,
-): Promise<T> {
-  const token = requireToken(options.token);
-
-  return request<T>(
-    "https://api.app.mrscraper.com/api/v1/scrapers-manual-rerun/bulk",
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json",
-        "x-api-token": token,
-      },
-      body: JSON.stringify({ scraperId: options.scraperId, urls: options.urls }),
-    },
-    600_000,
-  );
-}
-
-// ---------------------------------------------------------------------------
-// 7. getAllResults
-// ---------------------------------------------------------------------------
-
-export interface GetAllResultsOptions {
-  /** Field to sort by. Defaults to "updatedAt". */
-  sortField?: SortField;
-  /** Sort direction. Defaults to "DESC". */
-  sortOrder?: SortOrder;
-  /** Number of results per page (1–500). Defaults to 10. */
-  pageSize?: number;
-  /** Page number (1-based). Defaults to 1. */
-  page?: number;
-  /** Full-text search query. */
-  search?: string;
-  /** Column to use for date range filtering. */
-  dateRangeColumn?: string;
-  /** Start of date range (ISO 8601). */
-  startAt?: string;
-  /** End of date range (ISO 8601). */
-  endAt?: string;
-  /** Override the global MRSCRAPER_API_TOKEN for this call. */
-  token?: string;
-}
-
-/**
- * List scraping results with sorting, pagination, search, and date filters.
- * Throws {@link MrScraperError} on API or network errors.
- */
-export async function getAllResults<T = unknown>(
-  options: GetAllResultsOptions = {},
-): Promise<T> {
-  const token = requireToken(options.token);
-
-  const params = new URLSearchParams({
-    sortField: options.sortField ?? "updatedAt",
-    sortOrder: options.sortOrder ?? "DESC",
-    pageSize: String(options.pageSize ?? 10),
-    page: String(options.page ?? 1),
-  });
-
-  if (options.search) params.set("search", options.search);
-  if (options.dateRangeColumn) params.set("dateRangeColumn", options.dateRangeColumn);
-  if (options.startAt) params.set("startAt", options.startAt);
-  if (options.endAt) params.set("endAt", options.endAt);
-
-  const url = `https://api.app.mrscraper.com/api/v1/results?${params.toString()}`;
-
-  return request<T>(
-    url,
-    {
-      method: "GET",
-      headers: {
-        accept: "application/json",
-        "x-api-token": token,
-      },
-    },
-    600_000,
-  );
-}
-
-// ---------------------------------------------------------------------------
-// 8. getResultById
-// ---------------------------------------------------------------------------
-
-export interface GetResultByIdOptions {
-  /** The ID of the result to fetch. */
-  resultId: string;
-  /** Override the global MRSCRAPER_API_TOKEN for this call. */
-  token?: string;
-}
-
-/**
- * Fetch a single scraping result by its ID.
- * Throws {@link MrScraperError} on API or network errors.
- */
-export async function getResultById<T = unknown>(
-  options: GetResultByIdOptions,
-): Promise<T> {
-  const token = requireToken(options.token);
-
-  const url = `https://api.app.mrscraper.com/api/v1/results/${encodeURIComponent(options.resultId)}`;
-
-  return request<T>(
-    url,
-    {
-      method: "GET",
-      headers: {
-        accept: "application/json",
-        "x-api-token": token,
-      },
-    },
-    600_000,
-  );
-}
-
-// ---------------------------------------------------------------------------
-// 9. googleSerp
-// ---------------------------------------------------------------------------
-
-export interface GoogleSerpOptions {
-  /** Full Google SERP URL (for example a `https://www.google.com/search?...` URL). */
-  url: string;
-  /**
-   * When true, the API returns a raw payload (for example unparsed HTML).
-   * Defaults to false.
-   */
-  raw?: boolean;
-  /** Override the global MRSCRAPER_API_TOKEN for this call. */
-  token?: string;
-  /** Request timeout in milliseconds. Defaults to 300000 (5 minutes). */
-  timeoutMs?: number;
-}
-
-/**
- * Run a synchronous Google SERP scrape (`/api/google/serp/sync`).
- * Uses Bearer authentication on the sync scraper host.
- * Throws {@link MrScraperError} on API or network errors.
- */
-export async function googleSerp<T = unknown>(
-  options: GoogleSerpOptions,
-): Promise<T> {
-  const token = requireToken(options.token);
-  const timeoutMs = options.timeoutMs ?? 300_000;
-
-  return request<T>(
-    "https://sync.scraper.mrscraper.com/api/google/serp/sync",
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json",
-        authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        url: options.url,
-        raw: options.raw ?? false,
-      }),
-    },
-    timeoutMs,
+  return post<T>(
+    "https://sync.scraper.mrscraper.com/api/google/serp/v2/sync",
+    body,
+    authHeaders(token),
+    timeout,
+    token,
   );
 }
