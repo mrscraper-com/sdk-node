@@ -142,6 +142,30 @@ npm run build
 
 `npm test` uses mocked HTTP responses and does not require an API token.
 
+## Manual test with a real token
+
+Build this checkout and configure your API token:
+
+```bash
+npm run build
+export MRSCRAPER_API_TOKEN="YOUR_TOKEN"
+```
+
+Check account status:
+
+```bash
+node file.js account
+```
+
+Or run account status, page retrieval, and web search together:
+
+```bash
+node file.js "https://example.com" "python web scraping"
+```
+
+The script prints HTTP status and a preview of each response. Failed requests
+produce a nonzero exit code. These commands make live API requests.
+
 ## Publish manually to npm
 
 Version `3.1.0` adds `account()` to check identity, subscription, and quota. Both `package.json` and `package-lock.json` contain this version. The version 3 migration above documents the earlier method renames.
