@@ -2,7 +2,7 @@
 
 ![](./mrscraper.jpeg)
 
-Node.js SDK for [MrScraper](https://mrscraper.com) content fetching and Google search results. Requires Node.js 18 or newer and ES modules.
+Node.js SDK for [MrScraper](https://mrscraper.com) content fetching, Google search results, and account status. Requires Node.js 18 or newer and ES modules.
 
 ## Install and authenticate
 
@@ -11,7 +11,7 @@ npm install @mrscraper/sdk
 export MRSCRAPER_API_TOKEN="YOUR_TOKEN"
 ```
 
-The SDK reads `MRSCRAPER_API_TOKEN` automatically. You can instead pass `token` in either call's options object. Both functions are async and return `{ status_code, data, headers }`. JSON responses are parsed; other responses are returned as text in `data`.
+The SDK reads `MRSCRAPER_API_TOKEN` automatically. You can instead pass `token` in any call's options object. All three functions are async and return `{ status_code, data, headers }`. JSON responses are parsed; other responses are returned as text in `data`.
 
 ## Version 3 migration
 
@@ -93,13 +93,32 @@ console.log(result.data);
 | `render_js` | `false` | Render JavaScript features |
 | `timeout` | `600` | HTTP request timeout in seconds |
 
+## Account status
+
+```typescript
+import { account } from "@mrscraper/sdk";
+
+const result = await account(); // Optional: { token: "YOUR_TOKEN", timeout: 30 }
+console.log(result.data.subscription_status);
+console.log(result.data.token_remaining);
+console.log(result.data.user.email);
+```
+
+`account` sends `GET https://api.app.mrscraper.com/api/v1/subscription-accounts`
+with Bearer and `x-api-token` authentication. The timeout defaults to 30 seconds
+and must be positive. `data` is an `AccountSummary` with `subscription_status`,
+`enterprise`, `token_usage`, `token_limit`, `token_remaining`, `usage_percent`,
+`rate_limit`, `rate_ttl`, `auto_renew`, `ends_at`, and `user` (`name`, `email`,
+`verified`). Remaining tokens are clamped to zero when usage exceeds the limit.
+API keys, billing identifiers, and sensitive response headers are excluded.
+
 ## Errors and types
 
-Both functions reject with `MrScraperError` for API, authentication, network, and timeout errors. `status` contains the HTTP status for API errors and is `undefined` for network errors. Invalid options throw `TypeError` or `RangeError`.
+All three functions reject with `MrScraperError` for API, authentication, network, and timeout errors. `status` contains the HTTP status for API errors and is `undefined` for network errors. Invalid options throw `TypeError` or `RangeError`.
 
 ```typescript
 import { scraper_api, MrScraperError } from "@mrscraper/sdk";
-import type { ScraperApiOptions, WebSearchOptions, MrScraperResponse } from "@mrscraper/sdk";
+import type { AccountOptions, AccountSummary, ScraperApiOptions, WebSearchOptions, MrScraperResponse } from "@mrscraper/sdk";
 
 try {
   const result: MrScraperResponse = await scraper_api("https://example.com");
@@ -123,9 +142,33 @@ npm run build
 
 `npm test` uses mocked HTTP responses and does not require an API token.
 
+## Manual test with a real token
+
+Build this checkout and configure your API token:
+
+```bash
+npm run build
+export MRSCRAPER_API_TOKEN="YOUR_TOKEN"
+```
+
+Check account status:
+
+```bash
+node file.js account
+```
+
+Or run account status, page retrieval, and web search together:
+
+```bash
+node file.js "https://example.com" "python web scraping"
+```
+
+The script prints HTTP status and a preview of each response. Failed requests
+produce a nonzero exit code. These commands make live API requests.
+
 ## Publish manually to npm
 
-Version `3.0.0` is a major release because the public API names changed. Both `package.json` and `package-lock.json` already contain this version.
+Version `3.1.0` adds `account()` to check identity, subscription, and quota. Both `package.json` and `package-lock.json` contain this version. The version 3 migration above documents the earlier method renames.
 
 From the repository root, verify the package before publishing:
 
@@ -141,11 +184,11 @@ Review the dry-run file list, then log in with an npm account that has publishin
 npm login
 npm whoami
 npm publish --access public
-npm view @mrscraper/sdk@3.0.0 version
+npm view @mrscraper/sdk@3.1.0 version
 npm view @mrscraper/sdk dist-tags --json
 ```
 
-Complete npm's browser login and two-factor authentication prompts. The `prepublishOnly` script cleans and rebuilds `dist` before publishing. A successful publish makes `3.0.0` available under the `latest` tag by default. Each package version can only be published once.
+Complete npm's browser login and two-factor authentication prompts. The `prepublishOnly` script cleans and rebuilds `dist` before publishing. A successful publish makes `3.1.0` available under the `latest` tag by default. Each package version can only be published once.
 
 See npm's [scoped package publishing guide](https://docs.npmjs.com/creating-and-publishing-scoped-public-packages/) and [semantic versioning guide](https://docs.npmjs.com/about-semantic-versioning/).
 

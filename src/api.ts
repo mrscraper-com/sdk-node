@@ -15,6 +15,31 @@ export interface MrScraperResponse<T = unknown> {
   headers: Record<string, string>;
 }
 
+export interface AccountOptions {
+  /** Overrides MRSCRAPER_API_TOKEN for this call. */
+  token?: string;
+  /** HTTP request timeout in seconds. Defaults to 30. */
+  timeout?: number;
+}
+
+export interface AccountSummary {
+  subscription_status: string | null;
+  enterprise: boolean;
+  token_usage: number;
+  token_limit: number;
+  token_remaining: number;
+  usage_percent: number;
+  rate_limit: number;
+  rate_ttl: number;
+  auto_renew: boolean;
+  ends_at: string | null;
+  user: {
+    name: string | null;
+    email: string | null;
+    verified: boolean;
+  };
+}
+
 export interface ScraperApiOptions {
   /** Overrides MRSCRAPER_API_TOKEN for this call. */
   token?: string;
@@ -81,9 +106,10 @@ function setIfPresent(params: URLSearchParams, key: string, value: unknown): voi
   }
 }
 
-async function post<T>(
+async function request<T>(
+  method: "GET" | "POST",
   url: string,
-  body: Record<string, unknown>,
+  body: Record<string, unknown> | undefined,
   headers: Record<string, string>,
   timeoutSeconds: number,
   token: string,
@@ -92,9 +118,9 @@ async function post<T>(
   const timer = setTimeout(() => controller.abort(), timeoutSeconds * 1000);
   try {
     const response = await fetch(url, {
-      method: "POST",
+      method,
       headers,
-      body: JSON.stringify(body),
+      body: body === undefined ? undefined : JSON.stringify(body),
       signal: controller.signal,
     });
     if (response.status === 401) {
@@ -123,6 +149,65 @@ async function post<T>(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Check account identity, subscription, quota, and rate limits. */
+export async function account(
+  options: AccountOptions = {},
+): Promise<MrScraperResponse<AccountSummary>> {
+  const token = requireToken(options.token);
+  const timeout = options.timeout ?? 30;
+  if (!Number.isFinite(timeout) || timeout <= 0) {
+    throw new RangeError("timeout must be greater than 0 seconds");
+  }
+  const response = await request<unknown>(
+    "GET",
+    "https://api.app.mrscraper.com/api/v1/subscription-accounts",
+    undefined,
+    authHeaders(token),
+    timeout,
+    token,
+  );
+  const isRecord = (value: unknown): value is Record<string, unknown> =>
+    value !== null && typeof value === "object" && !Array.isArray(value);
+  const body = response.data;
+  const details = isRecord(body) && "data" in body ? body.data : body;
+  if (!isRecord(details)) {
+    throw new MrScraperError("Account response must contain an object", response.status_code);
+  }
+  const numberOrZero = (value: unknown): number => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  const stringOrNull = (value: unknown): string | null =>
+    typeof value === "string" ? value : null;
+  const tokenLimit = numberOrZero(details.tokenLimit);
+  const tokenUsage = numberOrZero(details.tokenUsage);
+  const user = isRecord(details.user) ? details.user : {};
+  return {
+    ...response,
+    // The raw account includes API tokens and billing identifiers.
+    data: {
+      subscription_status: stringOrNull(details.stripeStatus),
+      enterprise: Boolean(details.isEnterprise),
+      token_usage: tokenUsage,
+      token_limit: tokenLimit,
+      token_remaining: Math.max(0, tokenLimit - tokenUsage),
+      usage_percent: tokenLimit > 0 ? Number(((tokenUsage / tokenLimit) * 100).toFixed(2)) : 0,
+      rate_limit: numberOrZero(details.rateLimit),
+      rate_ttl: numberOrZero(details.rateTtl),
+      auto_renew: Boolean(details.isAutoRenew),
+      ends_at: stringOrNull(details.endsAt),
+      user: {
+        name: stringOrNull(user.name),
+        email: stringOrNull(user.email),
+        verified: Boolean(user.isVerified),
+      },
+    },
+    headers: Object.fromEntries(Object.entries(response.headers).filter(([key]) =>
+      !["authorization", "proxy-authorization", "set-cookie", "set-cookie2", "x-api-token"].includes(key.toLowerCase()),
+    )),
+  };
 }
 
 /** Fetch a page through the MrScraper API. Options mirror the Python client's page-fetch options. */
@@ -182,7 +267,7 @@ export async function scraper_api<T = unknown>(
   const body: Record<string, unknown> = { url, maxRetries };
   if (options.token_cap != null) body.tokenCap = options.token_cap;
 
-  return post<T>(`https://api.mrscraper.com/?${params}`, body, headers, timeout + 30, token);
+  return request<T>("POST", `https://api.mrscraper.com/?${params}`, body, headers, timeout + 30, token);
 }
 
 function normalizeSerpInput(input: string): {
@@ -239,7 +324,8 @@ export async function web_search<T = unknown>(
   if (language != null) body.language = language;
   if (page != null) body.page = page;
 
-  return post<T>(
+  return request<T>(
+    "POST",
     "https://sync.scraper.mrscraper.com/api/google/serp/v2/sync",
     body,
     authHeaders(token),
