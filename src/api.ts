@@ -457,13 +457,13 @@ function normalizeSerpInput(input: string): {
   page: number | null;
 } {
   const value = input.trim();
-  if (!value) throw new TypeError("A Google search query or URL is required");
+  if (!value) throw new TypeError("A search query is required");
   if (!/^https?:\/\//i.test(value)) {
     return { query: value, region: null, language: null, page: null };
   }
   const parsed = new URL(value);
   const query = (parsed.searchParams.get("q") ?? "").trim();
-  if (!query) throw new TypeError("Google search URL must contain a q parameter");
+  if (!query) throw new TypeError("Search URL must contain a q parameter");
   const startValue = (parsed.searchParams.get("start") ?? "0").trim();
   const start = /^[+-]?\d+$/.test(startValue) ? Number(startValue) : 0;
   return {
@@ -474,7 +474,7 @@ function normalizeSerpInput(input: string): {
   };
 }
 
-/** Fetch Google search results. Accepts query text or a Google search URL. */
+/** Search the web to retrieve real-time search results, including relevant website URLs, titles, descriptions, and related questions based on a given query. */
 export async function web_search<T = unknown>(
   url: string,
   options: WebSearchOptions = {},

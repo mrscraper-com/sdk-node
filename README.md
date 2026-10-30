@@ -2,7 +2,7 @@
 
 ![](./mrscraper.jpeg)
 
-Node.js SDK for [MrScraper](https://mrscraper.com) HTML, Markdown, screenshots, structured extraction, sitemap discovery, brand scraping, Google search results, and account status. Requires Node.js 18 or newer and ES modules.
+Node.js SDK for [MrScraper](https://mrscraper.com) HTML, Markdown, screenshots, structured extraction, sitemap discovery, brand scraping, Web Search, and account status. Requires Node.js 18 or newer and ES modules.
 
 ## Install and authenticate
 
@@ -17,17 +17,17 @@ The SDK reads `MRSCRAPER_API_TOKEN` automatically. You can instead pass `token` 
 
 These functions match the Python SDK's format-specific services. Each function selects its own output and agent; public options do not include `html`, `markdown`, or `screenshot` flags.
 
-| Function | Request and defaults |
+| Function | Purpose and parameters |
 |----------|----------------------|
-| `scraper_html(url, options)` | POST with `html=true`; Markdown and screenshot flags omitted |
-| `scraper_markdown(url, options)` | POST with `markdown=true`; HTML and screenshot flags omitted |
-| `get_screenshot(url, options)` | GET with `screenshot=full`, `browserRendering=true`, `waitUntil=domcontentloaded`, and `timeout=300` |
-| `scraper_json(url, options)` | POST with `html=true`, `agent=general`, and a prompt |
-| `scraper_multiple_page(url, options)` | POST with `agent=listing`, a prompt, and `maxPages=3`; output flags omitted |
-| `scraper_sitemap(url, options)` | POST with `agent=map`, `maxDepth=2`, `maxPages=3`, and `limit=1000`; output flags omitted |
-| `scrape_brand(url, options)` | POST with `action=brand-scraping` and `bundle=clean`; output flags omitted |
-| `get_brand(job_id, options)` | GET `/neo/brand?id=...`; optional `output` downloads an artifact |
-| `web_search(queryOrUrl, options)` | Fetch Google search results |
+| `scraper_html(url, options)` | Retrieve HTML from `url` |
+| `scraper_markdown(url, options)` | Retrieve Markdown from `url` |
+| `get_screenshot(url, options)` | Capture a screenshot; `full_page=true`, `wait_until="domcontentloaded"`, `timeout=300` |
+| `scraper_json(url, options)` | Extract structured data using `prompt` |
+| `scraper_multiple_page(url, options)` | Extract listing entries using `prompt`; `max_pages=3` |
+| `scraper_sitemap(url, options)` | Discover site URLs; `max_depth=2`, `max_pages=3`, `limit=1000` |
+| `scrape_brand(url, options)` | Start a brand scraping job; `bundle="clean"` |
+| `get_brand(job_id, options)` | Read a job by `job_id`; optional `output` downloads a file |
+| `web_search(url, options)` | Retrieve real-time web search results |
 | `account(options)` | Read account identity, subscription, quota, and rate limits |
 
 ### Migrating from v3 to v4
@@ -46,9 +46,9 @@ const markdown = await scraper_markdown(url);
 const screenshot = await get_screenshot(url);
 ```
 
-Import these functions from `@mrscraper/sdk`. Use `ScraperOptions` for shared page controls and the service option types below for specialized controls. To retrieve more than one format, call its service separately. Screenshot requests now use GET and default to full-page capture; set `full_page: false` for a viewport screenshot. Binary data is preserved as a `Buffer`.
+Import these functions from `@mrscraper/sdk`. Use `ScraperOptions` for shared page controls and the service option types below for specialized controls. To retrieve more than one format, call its service separately. Screenshots default to full-page capture; set `full_page: false` for a viewport screenshot. Binary data is preserved as a `Buffer`.
 
-For older versions, `fetch_content` maps to `scraper_html` and `google_serp` maps to `web_search`. Legacy version 1 names such as `fetchHtml` and `googleSerp` are not exported. The response wrapper remains `{ status_code, data, headers }`.
+For older versions, `fetch_content` maps to `scraper_html`. Use the current function names listed above when upgrading. The response wrapper remains `{ status_code, data, headers }`.
 
 ## HTML and Markdown
 
@@ -60,7 +60,7 @@ const markdown = await scraper_markdown("https://example.com", { home_page: true
 console.log(html.data, markdown.data);
 ```
 
-Scraping requests use `https://api.mrscraper.com/`. For HTML, Markdown, JSON extraction, multiple pages, and sitemap, the JSON body contains `url`, `maxRetries`, optional `tokenCap`, and the service's extraction fields. Other page controls are query parameters. Screenshot and brand creation requests put `url`, `maxRetries`, and optional `tokenCap` in the query; the brand creation JSON body contains only `url`.
+Use `scraper_html` or `scraper_markdown` for the desired page format. Both accept the shared scraping options below.
 
 ### Shared scraping options
 
@@ -72,7 +72,7 @@ Scraping requests use `https://api.mrscraper.com/`. For HTML, Markdown, JSON ext
 | `browser_rendering` | unset | `true` to force a browser, `false` to disable it, unset for automatic fallback; unavailable for screenshots, which always enable rendering |
 | `super` | `false` | Enable real device routing |
 | `use_proxy`, `proxy` | `true`, unset | Allow a proxy or supply `username:password@host:port` |
-| `home_page` | `false` | Visit the site's root first; sends `warmStart=true` |
+| `home_page` | `false` | Visit the site's root before the target page |
 | `wait_for_selector` | unset | Wait for a CSS selector |
 | `wait_until` | unset (`"domcontentloaded"` for screenshots) | Browser navigation wait condition; `null` omits it |
 | `block_resources`, `bypass_proxy` | `false`, `false` | Block resources or enable proxy bypass behavior |
@@ -81,7 +81,7 @@ Scraping requests use `https://api.mrscraper.com/`. For HTML, Markdown, JSON ext
 | `stream` | unset | Request a streamed response, buffered into the normal return value |
 | `discard_token_secret` | `""` | Value for the `x-discard-token-secret` API header |
 
-Unset optional query parameters are omitted. Explicit `false`, `0`, and empty strings are preserved where the Python client sends them.
+Unset options use the service defaults. Explicit `false`, `0`, and empty strings are preserved where supported.
 
 ## Screenshots
 
@@ -90,7 +90,7 @@ import { writeFile } from "node:fs/promises";
 import { get_screenshot } from "@mrscraper/sdk";
 
 const result = await get_screenshot("https://example.com", {
-  full_page: true, // Default; false sends screenshot=true for the viewport.
+  full_page: true, // Default; false captures the viewport.
   token_cap: 30,
 });
 if (Buffer.isBuffer(result.data)) await writeFile("page.png", result.data);
@@ -113,7 +113,7 @@ const listings = await scraper_multiple_page("https://books.toscrape.com", {
 console.log(page.data, listings.data);
 ```
 
-`ScraperJsonOptions.prompt` defaults to `"Extract all data as complete as possible."`. `ScraperMultiplePageOptions.prompt` defaults to `"Extract all entry data as complete as possible."`, and `max_pages` must be a positive integer. These become `prompt` and `maxPages` in the JSON body.
+`ScraperJsonOptions.prompt` defaults to `"Extract all data as complete as possible."`. `ScraperMultiplePageOptions.prompt` defaults to `"Extract all entry data as complete as possible."`, and `max_pages` must be a positive integer. Set `prompt` to describe the data to extract and `max_pages` to limit pagination.
 
 ## Sitemap discovery
 
@@ -130,7 +130,7 @@ const result = await scraper_sitemap("https://docs.mrscraper.com", {
 console.log(result.data);
 ```
 
-`ScraperSitemapOptions` maps `max_depth`, `max_pages`, `include_patterns`, and `exclude_patterns` to `maxDepth`, `maxPages`, `includePatterns`, and `excludePatterns` in the JSON body. Pattern strings are forwarded unchanged; unset or `null` patterns are omitted. `max_depth` must be a nonnegative integer; `max_pages` and `limit` must be positive integers.
+`ScraperSitemapOptions` supports `max_depth`, `max_pages`, `limit`, `include_patterns`, and `exclude_patterns`. Pattern strings are forwarded unchanged; unset or `null` patterns are omitted. `max_depth` must be a nonnegative integer; `max_pages` and `limit` must be positive integers.
 
 ## Brand scraping and downloads
 
@@ -151,7 +151,9 @@ if (Buffer.isBuffer(download.data)) await writeFile("brand.zip", download.data);
 
 `ScrapeBrandOptions.bundle` accepts `"clean"` (default), `"full"`, or `"none"`. `GetBrandOptions` accepts `token`, `timeout` (default `600` seconds), and optional `output`: `"html"`, `"bundle"`, `"screenshot"`, or `"screenshot_full"`. Omit `output` to read the job. HTML is text; ZIP and image downloads are `Buffer` values. The SDK makes one request per call and does not poll for completion.
 
-## Web search
+## Web Search
+
+Search the web to retrieve real-time search results, including relevant website URLs, titles, descriptions, and related questions based on a given query.
 
 ```typescript
 import { web_search } from "@mrscraper/sdk";
@@ -166,16 +168,16 @@ const result = await web_search("python web scraping", {
 console.log(result.data);
 ```
 
-`web_search` sends `POST https://sync.scraper.mrscraper.com/api/google/serp/v2/sync`. The first argument may be query text or a Google search URL. For a URL, the SDK extracts `q`, `gl`, `hl`, and `start`; explicit options override the extracted region, language, and page. `raw: true` is the default and requests HTML regardless of `format`. Set `raw: false` to use `format`.
+`web_search` accepts a search query as its first argument. `raw: true` is the default and requests HTML regardless of `format`. Set `raw: false` to use `format`.
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `url` | Required first argument | Search query or Google search URL |
+| `url` | Required first argument | The search query |
 | `token` | Environment variable | API token override |
 | `raw` | `true` | Request HTML when true |
 | `format` | `"json"` | `"json"` or `"html"` when `raw` is false |
 | `region`, `language` | unset | Country and language |
-| `page` | unset | One based result page |
+| `page` | unset | Results page number, starting at `1` |
 | `render_js` | `false` | Render JavaScript features |
 | `timeout` | `600` | HTTP request timeout in seconds |
 
@@ -190,8 +192,7 @@ console.log(result.data.token_remaining);
 console.log(result.data.user.email);
 ```
 
-`account` sends `GET https://api.app.mrscraper.com/api/v1/subscription-accounts`
-with Bearer and `x-api-token` authentication. The timeout defaults to 30 seconds
+`account` checks the account associated with the configured API token. The timeout defaults to 30 seconds
 and must be positive. `data` is an `AccountSummary` with `subscription_status`,
 `enterprise`, `token_usage`, `token_limit`, `token_remaining`, `usage_percent`,
 `rate_limit`, `rate_ttl`, `auto_renew`, `ends_at`, and `user` (`name`, `email`,
@@ -274,41 +275,19 @@ Use the job ID from the response with `get_brand` as shown in [Brand scraping an
 
 ## Publish manually to npm
 
-The removal of `scraper_api` and `ScraperApiOptions` is a breaking change. The first release with these services targets **4.0.0**. Check the registry before preparing the release; the target version must not already be published.
-
-Update `package.json` and `package-lock.json` together, run the tests, and preview the package. Run the version command once; skip it if both files already specify `4.0.0`:
+This checkout prepares documentation patch **4.0.1**. Version **4.0.0** is
+already published. Publishing remains manual. Validate and preview the package:
 
 ```bash
-npm view @mrscraper/sdk versions --json
-npm version 4.0.0 --no-git-tag-version
 npm ci
 npm test
+npm pack --dry-run
 npm publish --dry-run --access public
 ```
 
-Continue only after the tests and dry run succeed. The package should include `dist/`, `README.md`, `LICENSE`, `mrscraper.jpeg`, and `package.json`. The `files` list in `package.json` excludes the local `file.js` helper from the npm package.
-
-Stage the release files explicitly to keep changes to `file.js` local:
-
-```bash
-git add README.md package.json package-lock.json \
-  src/api.ts src/index.ts \
-  tests/api.test.mjs tests/scraping.test.mjs tests/types.test.ts
-git restore --staged -- file.js
-git diff --cached --name-only
-git diff --cached --check
-```
-
-Confirm that `file.js` does not appear in the staged file list, then commit and push the current branch:
-
-```bash
-git commit -m "feat!: add format-specific scraping services"
-git push -u origin HEAD
-```
-
-The uncommitted changes in `file.js` remain on your machine; its previously committed version remains in Git. If the repository uses pull requests, complete its review and merge process before publishing the release.
-
-Log in with an npm account that has publishing access to `@mrscraper/sdk`, publish, and verify that `latest` points to `4.0.0`:
+The package includes `dist/`, `README.md`, `LICENSE`, `mrscraper.jpeg`, and
+`package.json`. The `files` list excludes the local `file.js` helper. Commit
+and push the release files, then publish with your npm account:
 
 ```bash
 npm login
@@ -318,9 +297,10 @@ npm view @mrscraper/sdk version
 npm view @mrscraper/sdk dist-tags --json
 ```
 
-Complete npm's browser login and two-factor authentication prompts. The `prepublishOnly` script cleans and rebuilds `dist` before publishing. A successful publish uses the `latest` tag by default. Each package version can only be published once. For later releases, select a new unpublished version and update the release commands accordingly.
-
-See npm's [scoped package publishing guide](https://docs.npmjs.com/creating-and-publishing-scoped-public-packages/) and [semantic versioning guide](https://docs.npmjs.com/about-semantic-versioning/).
+Complete npm's browser login and two-factor authentication prompts. The
+`prepublishOnly` script rebuilds `dist` before publishing. Each version can be
+published only once. For later releases, update `package.json` and
+`package-lock.json` together with a new version before validating and publishing.
 
 ## License
 

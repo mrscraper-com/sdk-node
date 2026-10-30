@@ -1,6 +1,6 @@
 {
   "name": "@mrscraper/sdk",
-  "version": "4.0.0",
+  "version": "4.0.1",
   "description": "Official Node.js SDK for MrScraper HTML, Markdown, screenshots, extraction, sitemap, brand scraping, web search, and account status.",
   "license": "MIT",
   "type": "module",
