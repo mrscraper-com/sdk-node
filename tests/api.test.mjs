@@ -12,11 +12,99 @@ async function withFetch(handler, run) {
   }
 }
 
-test("public API has only two request functions", () => {
-  assert.deepEqual(Object.keys(sdk).sort(), ["MrScraperError", "scraper_api", "web_search"]);
+test("public API exposes service functions without the internal scraper API", () => {
+  assert.deepEqual(Object.keys(sdk).sort(), ["MrScraperError", "account", "get_brand", "get_screenshot", "scrape_brand", "scraper_html", "scraper_json", "scraper_markdown", "scraper_multiple_page", "scraper_sitemap", "web_search"]);
 });
 
-test("scraper_api matches Python request mapping and parses JSON wrapper", async () => {
+test("account uses an authenticated GET and returns a safe subscription summary", async () => {
+  const details = {
+    stripeStatus: "active", isEnterprise: true, tokenLimit: "100", tokenUsage: 25,
+    rateLimit: 10, rateTtl: 60, isAutoRenew: true, endsAt: "2026-11-01T00:00:00Z",
+    stripeCustomerId: "private-billing-id",
+    user: { name: "Test User", email: "user@example.com", isVerified: true, latestApiToken: "private-key" },
+  };
+  for (const body of [details, { message: "ok", data: details }]) {
+    await withFetch(async (input, init) => {
+      assert.equal(String(input), "https://api.app.mrscraper.com/api/v1/subscription-accounts");
+      assert.equal(init.method, "GET");
+      assert.equal(init.body, undefined);
+      assert.equal(init.headers.Authorization, "Bearer test-token");
+      assert.equal(init.headers["x-api-token"], "test-token");
+      return Response.json(body, { headers: { "set-cookie": "session=private", "x-request-id": "req-1" } });
+    }, async () => {
+      const result = await sdk.account({ token: "test-token" });
+      assert.equal(result.status_code, 200);
+      assert.deepEqual(result.data, {
+        subscription_status: "active", enterprise: true,
+        token_usage: 25, token_limit: 100, token_remaining: 75, usage_percent: 25,
+        rate_limit: 10, rate_ttl: 60, auto_renew: true, ends_at: "2026-11-01T00:00:00Z",
+        user: { name: "Test User", email: "user@example.com", verified: true },
+      });
+      assert.equal(result.headers["x-request-id"], "req-1");
+      assert.doesNotMatch(JSON.stringify(result), /private|stripeCustomerId|latestApiToken/);
+    });
+  }
+});
+
+test("account handles absent quotas and clamps remaining tokens at zero", async () => {
+  for (const details of [{}, { tokenLimit: 10, tokenUsage: 15 }]) {
+    await withFetch(async () => Response.json({ data: details }), async () => {
+      const result = await sdk.account({ token: "test-token" });
+      assert.equal(result.data.token_remaining, 0);
+      assert.equal(result.data.usage_percent, details.tokenLimit ? 150 : 0);
+      assert.deepEqual(result.data.user, { name: null, email: null, verified: false });
+    });
+  }
+});
+
+test("account uses environment credentials and rejects missing credentials before fetching", async () => {
+  const original = process.env.MRSCRAPER_API_TOKEN;
+  try {
+    process.env.MRSCRAPER_API_TOKEN = "environment-token";
+    await withFetch(async (_input, init) => {
+      assert.equal(init.headers.Authorization, "Bearer environment-token");
+      return Response.json({});
+    }, () => sdk.account());
+    delete process.env.MRSCRAPER_API_TOKEN;
+    await withFetch(async () => assert.fail("should not fetch"), async () => {
+      await assert.rejects(sdk.account(), sdk.MrScraperError);
+      for (const timeout of [0, -1, Infinity, NaN]) {
+        await assert.rejects(sdk.account({ token: "test-token", timeout }), RangeError);
+      }
+    });
+  } finally {
+    if (original === undefined) delete process.env.MRSCRAPER_API_TOKEN;
+    else process.env.MRSCRAPER_API_TOKEN = original;
+  }
+});
+
+test("account preserves HTTP failures and rejects malformed account payloads", async () => {
+  for (const status of [401, 403, 500]) {
+    await withFetch(async () => Response.json({ error: "bad test-token" }, { status }), async () => {
+      await assert.rejects(sdk.account({ token: "test-token" }), (error) =>
+        error instanceof sdk.MrScraperError && error.status === status && !error.message.includes("test-token"));
+    });
+  }
+  for (const body of [null, [], { data: null }]) {
+    await withFetch(async () => Response.json(body), async () => {
+      await assert.rejects(sdk.account({ token: "test-token" }), /Account response must contain an object/);
+    });
+  }
+});
+
+test("account enforces its HTTP deadline while reading the body", async () => {
+  await withFetch(async (_input, init) => ({
+    status: 200, ok: true, headers: new Headers({ "content-type": "application/json" }),
+    json: () => new Promise((_resolve, reject) => {
+      init.signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+    }),
+  }), async () => {
+    await assert.rejects(sdk.account({ token: "test-token", timeout: 0.01 }), (error) =>
+      error instanceof sdk.MrScraperError && error.status === undefined && error.message === "aborted");
+  });
+});
+
+test("scraper_html matches Python request mapping and parses JSON wrapper", async () => {
   await withFetch(async (input, init) => {
     const endpoint = new URL(input);
     const params = endpoint.searchParams;
@@ -32,15 +120,16 @@ test("scraper_api matches Python request mapping and parses JSON wrapper", async
     assert.equal(params.get("timeout"), "45");
     assert.equal(params.get("geoCode"), "ID");
     assert.equal(params.get("proxyCountry"), "SG");
-    assert.equal(params.get("browserRendering"), "true");
+    assert.equal(params.get("browserRendering"), "false");
     assert.equal(params.get("super"), "true");
     assert.equal(params.get("useProxy"), "false");
     assert.equal(params.get("proxy"), "user:pass@proxy.example:8000");
-    assert.equal(params.get("html"), "false");
-    assert.equal(params.get("markdown"), "true");
+    assert.equal(params.get("html"), "true");
+    assert.equal(params.has("markdown"), false);
     assert.equal(params.get("waitForSelector"), ".ready");
+    assert.equal(params.get("waitUntil"), "networkidle");
     assert.equal(params.get("warmStart"), "true");
-    assert.equal(params.get("screenshot"), "true");
+    assert.equal(params.has("screenshot"), false);
     assert.equal(params.get("blockResources"), "true");
     assert.equal(params.get("bypassProxy"), "true");
     assert.equal(params.get("cookieJar"), "domain=example.com&country=sg");
@@ -54,7 +143,7 @@ test("scraper_api matches Python request mapping and parses JSON wrapper", async
       headers: { "content-type": "application/json", "x-test": "yes" },
     });
   }, async () => {
-    const result = await sdk.scraper_api("https://example.com/page", {
+    const result = await sdk.scraper_html("https://example.com/page", {
       token: "test-token",
       timeout: 45,
       geo_code: "ID",
@@ -66,6 +155,7 @@ test("scraper_api matches Python request mapping and parses JSON wrapper", async
       html: false,
       markdown: true,
       wait_for_selector: ".ready",
+      wait_until: "networkidle",
       home_page: true,
       screenshot: true,
       block_resources: true,
@@ -83,21 +173,21 @@ test("scraper_api matches Python request mapping and parses JSON wrapper", async
   });
 });
 
-test("scraper_api defaults and explicit false values", async () => {
+test("scraper_html defaults and explicit false values", async () => {
   await withFetch(async (input, init) => {
     const params = new URL(input).searchParams;
     assert.deepEqual(JSON.parse(init.body), { url: "https://example.com", maxRetries: 3 });
     assert.equal(params.get("geoCode"), "US");
     assert.equal(params.get("timeout"), "120");
     assert.equal(params.get("html"), "true");
-    assert.equal(params.get("markdown"), "false");
+    assert.equal(params.has("markdown"), false);
     assert.equal(params.get("browserRendering"), "false");
     for (const key of ["super", "useProxy", "screenshot", "warmStart", "blockResources", "stream"]) {
       assert.equal(params.has(key), false);
     }
     return new Response("<html>ok</html>", { headers: { "content-type": "text/html" } });
   }, async () => {
-    const result = await sdk.scraper_api("https://example.com", {
+    const result = await sdk.scraper_html("https://example.com", {
       token: "test-token", browser_rendering: false,
     });
     assert.equal(result.data, "<html>ok</html>");
@@ -145,7 +235,7 @@ test("errors carry status and do not disclose a query token", async () => {
     status: 422, headers: { "content-type": "application/json" },
   }), async () => {
     await assert.rejects(
-      sdk.scraper_api("https://example.com", { token: "secret-token" }),
+      sdk.scraper_html("https://example.com", { token: "secret-token" }),
       (error) => error instanceof sdk.MrScraperError && error.status === 422 && !error.message.includes("secret-token"),
     );
   });
@@ -159,8 +249,8 @@ test("errors carry status and do not disclose a query token", async () => {
 
 test("validates options before sending", async () => {
   await withFetch(async () => { throw new Error("should not fetch"); }, async () => {
-    await assert.rejects(sdk.scraper_api("https://example.com", { token: "x", timeout: 301 }), RangeError);
-    await assert.rejects(sdk.scraper_api("https://example.com", { token: "x", max_retries: -1 }), RangeError);
+    await assert.rejects(sdk.scraper_html("https://example.com", { token: "x", timeout: 301 }), RangeError);
+    await assert.rejects(sdk.scraper_html("https://example.com", { token: "x", max_retries: -1 }), RangeError);
     await assert.rejects(sdk.web_search("", { token: "x" }), TypeError);
     await assert.rejects(sdk.web_search("https://google.com/search?hl=en", { token: "x" }), TypeError);
     await assert.rejects(sdk.web_search("test", { token: "x", page: 0 }), RangeError);
@@ -182,10 +272,29 @@ test("web_search accepts plain query text with default HTML format", async () =>
 test("network failures have no HTTP status", async () => {
   await withFetch(async () => { throw new Error("connection failed"); }, async () => {
     await assert.rejects(
-      sdk.scraper_api("https://example.com", { token: "test-token" }),
+      sdk.scraper_html("https://example.com", { token: "test-token" }),
       (error) => error instanceof sdk.MrScraperError
         && error.status === undefined
         && error.message === "connection failed",
     );
+  });
+});
+
+test("HTTP errors retain status with malformed, empty, or unreadable bodies", async () => {
+  for (const [status, body] of [[422, '{"error":"test-token"'], [503, ""]]) {
+    await withFetch(async () => new Response(body, {
+      status, headers: { "content-type": "application/json" },
+    }), async () => {
+      await assert.rejects(sdk.scraper_json("https://example.com", { token: "test-token" }),
+        (error) => error instanceof sdk.MrScraperError && error.status === status &&
+          !error.message.includes("test-token"));
+    });
+  }
+  await withFetch(async () => ({
+    status: 502, ok: false,
+    text: async () => { throw new Error("response stream closed"); },
+  }), async () => {
+    await assert.rejects(sdk.get_brand("job-1", { token: "test-token" }),
+      (error) => error instanceof sdk.MrScraperError && error.status === 502);
   });
 });

@@ -1,7 +1,7 @@
 {
   "name": "@mrscraper/sdk",
-  "version": "3.0.0",
-  "description": "Official Node.js SDK for the MrScraper scraper API and web search.",
+  "version": "4.0.1",
+  "description": "Official Node.js SDK for MrScraper HTML, Markdown, screenshots, extraction, sitemap, brand scraping, web search, and account status.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -22,7 +22,8 @@
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build",
-    "test": "npm run build && node --test tests/*.test.mjs"
+    "test": "npm run build && npm run test:types && node --test tests/*.test.mjs",
+    "test:types": "tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck tests/types.test.ts"
   },
   "devDependencies": {
     "@types/node": "^25.3.3",
