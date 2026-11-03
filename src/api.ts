@@ -399,8 +399,7 @@ export async function scraper_api<T = ScraperApiData>(
 }
 
 /**
- * Searches the web to retrieve real-time results, including relevant website
- * URLs, titles, descriptions, and related questions based on a given query.
+ * Search the web for real-time results: website URLs, titles, and descriptions.
  *
  * Sends `{ action: "websearch", query, country, numResults }` as a JSON POST
  * to the MrScraper API. `country` is omitted when unset.

@@ -18,7 +18,7 @@ The SDK reads `MRSCRAPER_API_TOKEN` automatically. You can instead pass `token` 
 | Function | Purpose |
 |----------|---------|
 | `scraper_api(url, options?)` | Fetch a public web page as rendered HTML, Markdown, screenshot, or a combination |
-| `web_search(query, options?)` | Search the web for real-time results: website URLs, titles, descriptions, and related questions |
+| `web_search(query, options?)` | Search the web for real-time results: website URLs, titles, and descriptions |
 | `account(options?)` | Read account identity, subscription, quota, and rate limits |
 
 The package also exports `MrScraperError` and the TypeScript types `ScraperApiOptions`, `ScraperApiData`, `WebSearchOptions`, `WebSearchResponse`, `WebSearchResult`, `AccountOptions`, `AccountSummary`, and `MrScraperResponse`.
@@ -104,7 +104,7 @@ Unset options use the service defaults. Explicit `false`, `0`, and empty strings
 
 ## Web Search
 
-Searches the web to retrieve real-time results, including relevant website URLs, titles, descriptions, and related questions based on a given query.
+Search the web for real-time results: website URLs, titles, and descriptions.
 
 ```typescript
 import { web_search } from "@mrscraper/sdk";
