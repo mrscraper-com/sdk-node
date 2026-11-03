@@ -40,11 +40,17 @@ export interface AccountSummary {
   };
 }
 
-/** Shared page, browser, proxy, and retry controls. Output is selected by the function. */
-export interface ScraperOptions {
+/** Options for `scraper_api`. At least one of html, markdown, or screenshot must be true. */
+export interface ScraperApiOptions {
   /** Overrides MRSCRAPER_API_TOKEN for this call. */
   token?: string;
-  /** Page timeout in seconds, from 1 to 300. */
+  /** Return the page HTML. Defaults to true. */
+  html?: boolean;
+  /** Return the page as Markdown. Defaults to false. */
+  markdown?: boolean;
+  /** Capture a screenshot. Defaults to false; true also enables browser rendering. */
+  screenshot?: boolean;
+  /** Page timeout in seconds, from 1 to 300. Defaults to 120. */
   timeout?: number;
   geo_code?: string;
   proxy_country?: string | null;
@@ -66,65 +72,50 @@ export interface ScraperOptions {
   discard_token_secret?: string;
 }
 
-export interface ScreenshotOptions extends Omit<ScraperOptions, "browser_rendering"> {
-  /** Defaults to true (screenshot=full); false captures the viewport. */
-  full_page?: boolean;
-}
-
-export interface ScraperJsonOptions extends ScraperOptions {
-  /** Defaults to "Extract all data as complete as possible." */
-  prompt?: string;
-}
-
-export interface ScraperMultiplePageOptions extends ScraperOptions {
-  /** Defaults to "Extract all entry data as complete as possible." */
-  prompt?: string;
-  /** Positive integer, defaults to 3. */
-  max_pages?: number;
-}
-
-export interface ScraperSitemapOptions extends ScraperOptions {
-  /** Nonnegative integer, defaults to 2. */
-  max_depth?: number;
-  /** Positive integer, defaults to 3. */
-  max_pages?: number;
-  /** Positive integer, defaults to 1000. */
-  limit?: number;
-  /** Pattern strings are forwarded unchanged; unset patterns are omitted. */
-  include_patterns?: string | null;
-  exclude_patterns?: string | null;
-}
-
-export type BrandBundle = "clean" | "full" | "none";
-export type BrandOutput = "html" | "bundle" | "screenshot" | "screenshot_full";
-
-export interface ScrapeBrandOptions extends ScraperOptions {
-  /** Defaults to clean. */
-  bundle?: BrandBundle;
-}
-
-export interface GetBrandOptions {
-  token?: string;
-  output?: BrandOutput | null;
-  /** HTTP timeout in seconds, defaults to 600. */
-  timeout?: number;
-}
+/**
+ * `scraper_api` data: an HTML string when only HTML is requested, otherwise an
+ * object with an entry for each requested output (the screenshot is base64).
+ */
+export type ScraperApiData = string | {
+  html?: string;
+  markdown?: string;
+  screenshot?: string;
+  [key: string]: unknown;
+};
 
 export interface WebSearchOptions {
   /** Overrides MRSCRAPER_API_TOKEN for this call. */
   token?: string;
-  /** Compatibility flag: true requests HTML even when format is "json". */
-  raw?: boolean;
-  region?: string | null;
-  language?: string | null;
-  page?: number | null;
-  format?: "json" | "html";
-  render_js?: boolean;
-  /** HTTP request timeout in seconds. */
+  /** Country code for localized results, such as "us". Omitted when unset. */
+  country?: string | null;
+  /** Number of results, an integer from 10 to 100. Defaults to 10. */
+  num_results?: number;
+  /** HTTP request timeout in seconds. Defaults to 600. */
   timeout?: number;
 }
 
-function requireToken(explicitToken?: string): string {
+export interface WebSearchResult {
+  rank: number;
+  title: string;
+  url: string;
+  description: string;
+  source: string;
+}
+
+export interface WebSearchResponse {
+  success: boolean;
+  message: string;
+  data: WebSearchResult[];
+}
+
+const API_URL = "https://api.mrscraper.com";
+const MIN_SEARCH_RESULTS = 10;
+const MAX_SEARCH_RESULTS = 100;
+
+// The helpers below are exported for the SDK's internal modules only; the
+// package entry point (index.ts) does not re-export them.
+
+export function requireToken(explicitToken?: string): string {
   const token = explicitToken || process.env.MRSCRAPER_API_TOKEN || "";
   if (!token.trim()) {
     throw new MrScraperError(
@@ -134,7 +125,7 @@ function requireToken(explicitToken?: string): string {
   return token;
 }
 
-function authHeaders(token: string): Record<string, string> {
+export function authHeaders(token: string): Record<string, string> {
   return {
     "Content-Type": "application/json",
     accept: "application/json",
@@ -143,13 +134,13 @@ function authHeaders(token: string): Record<string, string> {
   };
 }
 
-function setIfPresent(params: URLSearchParams, key: string, value: unknown): void {
+export function setIfPresent(params: URLSearchParams, key: string, value: unknown): void {
   if (value !== null && value !== undefined) {
     params.set(key, typeof value === "boolean" ? String(value) : String(value));
   }
 }
 
-async function request<T>(
+export async function request<T>(
   method: "GET" | "POST",
   url: string,
   body: Record<string, unknown> | undefined,
@@ -202,7 +193,10 @@ async function request<T>(
   }
 }
 
-/** Check account identity, subscription, quota, and rate limits. */
+/**
+ * Return account identity, subscription, quota, and rate limits for the API
+ * token. API tokens, billing identifiers, and sensitive headers are excluded.
+ */
 export async function account(
   options: AccountOptions = {},
 ): Promise<MrScraperResponse<AccountSummary>> {
@@ -261,10 +255,14 @@ export async function account(
   };
 }
 
-interface ScraperRequest {
+/** Shared page, browser, proxy, and retry controls without output flags. */
+export type ScrapeOptions = Omit<ScraperApiOptions, "html" | "markdown" | "screenshot">;
+
+/** Output, method, and agent selection made by the SDK rather than by caller options. */
+export interface ScrapeRequest {
   method?: "GET" | "POST";
-  html?: true;
-  markdown?: true;
+  html?: boolean;
+  markdown?: boolean;
   screenshot?: true | "full";
   agent?: "general" | "listing" | "map";
   prompt?: string;
@@ -274,7 +272,7 @@ interface ScraperRequest {
   include_patterns?: string | null;
   exclude_patterns?: string | null;
   action?: "brand-scraping";
-  bundle?: BrandBundle;
+  bundle?: "clean" | "full" | "none";
 }
 
 function validateInteger(name: string, value: number | undefined, minimum: number): void {
@@ -283,11 +281,15 @@ function validateInteger(name: string, value: number | undefined, minimum: numbe
   }
 }
 
-// Kept private: public functions select their output and agent independently of user options.
-async function scraper_api<T>(
+/**
+ * Build and send a scraping request for `scraper_api` and the internal
+ * format-specific helpers. GET and brand requests carry the URL and retry
+ * controls in the query; other POSTs carry them in the JSON body.
+ */
+export async function scrape<T>(
   url: string,
-  options: ScraperOptions,
-  selected: ScraperRequest,
+  options: ScrapeOptions,
+  selected: ScrapeRequest,
 ): Promise<MrScraperResponse<T>> {
   const token = requireToken(options.token);
   const timeout = options.timeout ?? 120;
@@ -365,151 +367,68 @@ async function scraper_api<T>(
   for (const [name, value] of Object.entries(fields)) {
     if (value != null) body[name] = value;
   }
-  return request<T>(method, `https://api.mrscraper.com/?${params}`,
+  return request<T>(method, `${API_URL}/?${params}`,
     method === "GET" ? undefined : body, headers, timeout + 30, token);
 }
 
-/** Fetch HTML. Only html=true is sent; other output flags are omitted. */
-export async function scraper_html<T = unknown>(
-  url: string, options: ScraperOptions = {},
-): Promise<MrScraperResponse<T>> {
-  return scraper_api<T>(url, options, { html: true });
-}
-
-/** Fetch Markdown. Only markdown=true is sent; other output flags are omitted. */
-export async function scraper_markdown<T = unknown>(
-  url: string, options: ScraperOptions = {},
-): Promise<MrScraperResponse<T>> {
-  return scraper_api<T>(url, options, { markdown: true });
-}
-
-/** Capture a screenshot using GET. Images are returned as Buffer in data. */
-export async function get_screenshot<T = unknown>(
-  url: string, options: ScreenshotOptions = {},
-): Promise<MrScraperResponse<T>> {
-  const fullPage = options.full_page === undefined ? true : options.full_page;
-  if (typeof fullPage !== "boolean") throw new TypeError("full_page must be a boolean");
-  return scraper_api<T>(url, {
-    ...options,
-    timeout: options.timeout ?? 300,
-    wait_until: options.wait_until === undefined ? "domcontentloaded" : options.wait_until,
-  }, { method: "GET", screenshot: fullPage ? "full" : true });
-}
-
-/** Extract structured JSON with the general agent and html=true. */
-export async function scraper_json<T = unknown>(
-  url: string, options: ScraperJsonOptions = {},
-): Promise<MrScraperResponse<T>> {
-  return scraper_api<T>(url, options, {
-    html: true, agent: "general", prompt: options.prompt ?? "Extract all data as complete as possible.",
-  });
-}
-
-/** Extract entries across multiple pages using the listing agent. */
-export async function scraper_multiple_page<T = unknown>(
-  url: string, options: ScraperMultiplePageOptions = {},
-): Promise<MrScraperResponse<T>> {
-  return scraper_api<T>(url, options, {
-    agent: "listing", prompt: options.prompt ?? "Extract all entry data as complete as possible.",
-    max_pages: options.max_pages ?? 3,
-  });
-}
-
-/** Discover URLs with the map agent; pattern strings are preserved unchanged. */
-export async function scraper_sitemap<T = unknown>(
-  url: string, options: ScraperSitemapOptions = {},
-): Promise<MrScraperResponse<T>> {
-  return scraper_api<T>(url, options, {
-    agent: "map", max_depth: options.max_depth ?? 2, max_pages: options.max_pages ?? 3,
-    limit: options.limit ?? 1000, include_patterns: options.include_patterns,
-    exclude_patterns: options.exclude_patterns,
-  });
-}
-
-/** Start a brand-scraping job; use the returned job ID with get_brand. */
-export async function scrape_brand<T = unknown>(
-  url: string, options: ScrapeBrandOptions = {},
-): Promise<MrScraperResponse<T>> {
-  return scraper_api<T>(url, options, { action: "brand-scraping", bundle: options.bundle ?? "clean" });
-}
-
-/** Read a brand job or download HTML, a ZIP bundle, or a screenshot. */
-export async function get_brand<T = unknown>(
-  job_id: string, options: GetBrandOptions = {},
-): Promise<MrScraperResponse<T>> {
-  const token = requireToken(options.token);
-  if (typeof job_id !== "string" || !job_id.trim()) throw new TypeError("job_id must be a non-empty string");
-  if (options.output != null && !["html", "bundle", "screenshot", "screenshot_full"].includes(options.output)) {
-    throw new TypeError("output must be 'html', 'bundle', 'screenshot', or 'screenshot_full'");
-  }
-  const timeout = options.timeout ?? 600;
-  if (!Number.isFinite(timeout) || timeout <= 0) throw new RangeError("timeout must be greater than 0 seconds");
-  const params = new URLSearchParams({ id: job_id });
-  setIfPresent(params, "output", options.output);
-  return request<T>("GET", `https://api.mrscraper.com/neo/brand?${params}`,
-    undefined, authHeaders(token), timeout, token);
-}
-
-function normalizeSerpInput(input: string): {
-  query: string;
-  region: string | null;
-  language: string | null;
-  page: number | null;
-} {
-  const value = input.trim();
-  if (!value) throw new TypeError("A search query is required");
-  if (!/^https?:\/\//i.test(value)) {
-    return { query: value, region: null, language: null, page: null };
-  }
-  const parsed = new URL(value);
-  const query = (parsed.searchParams.get("q") ?? "").trim();
-  if (!query) throw new TypeError("Search URL must contain a q parameter");
-  const startValue = (parsed.searchParams.get("start") ?? "0").trim();
-  const start = /^[+-]?\d+$/.test(startValue) ? Number(startValue) : 0;
-  return {
-    query,
-    region: parsed.searchParams.get("gl"),
-    language: parsed.searchParams.get("hl"),
-    page: start > 0 ? Math.floor(start / 10) + 1 : null,
-  };
-}
-
-/** Search the web to retrieve real-time search results, including relevant website URLs, titles, descriptions, and related questions based on a given query. */
-export async function web_search<T = unknown>(
+/**
+ * Fetch a public web page as rendered HTML, Markdown, screenshot, or a combination.
+ *
+ * Sends a GET request; the target URL, page options, and retry controls are all
+ * query parameters. HTML alone returns a string; any combination with Markdown
+ * or a screenshot returns an object such as `{ html, markdown, screenshot }`,
+ * where the screenshot is base64. At least one output must be true.
+ */
+export async function scraper_api<T = ScraperApiData>(
   url: string,
+  options: ScraperApiOptions = {},
+): Promise<MrScraperResponse<T>> {
+  const { html = true, markdown = false, screenshot = false, ...rest } = options;
+  for (const [name, value] of [["html", html], ["markdown", markdown], ["screenshot", screenshot]] as const) {
+    if (typeof value !== "boolean") throw new TypeError(`${name} must be a boolean`);
+  }
+  if (!html && !markdown && !screenshot) {
+    throw new TypeError("At least one of html, markdown, or screenshot must be true");
+  }
+  return scrape<T>(url, rest, {
+    method: "GET",
+    html,
+    markdown,
+    screenshot: screenshot ? true : undefined,
+  });
+}
+
+/**
+ * Searches the web to retrieve real-time results, including relevant website
+ * URLs, titles, descriptions, and related questions based on a given query.
+ *
+ * Sends `{ action: "websearch", query, country, numResults }` as a JSON POST
+ * to the MrScraper API. `country` is omitted when unset.
+ */
+export async function web_search<T = WebSearchResponse>(
+  query: string,
   options: WebSearchOptions = {},
 ): Promise<MrScraperResponse<T>> {
   const token = requireToken(options.token);
-  const format = options.format ?? "json";
-  if (format !== "json" && format !== "html") {
-    throw new TypeError("format must be 'json' or 'html'");
+  if (typeof query !== "string" || !query.trim()) {
+    throw new TypeError("A search query is required");
   }
-  if (options.page != null && (!Number.isInteger(options.page) || options.page < 1)) {
-    throw new RangeError("page must be a positive integer");
+  const country = options.country;
+  if (country != null && (typeof country !== "string" || !country.trim())) {
+    throw new TypeError("country must be a non-empty string");
+  }
+  const numResults = options.num_results ?? MIN_SEARCH_RESULTS;
+  if (!Number.isInteger(numResults) || numResults < MIN_SEARCH_RESULTS || numResults > MAX_SEARCH_RESULTS) {
+    throw new RangeError(
+      `num_results must be an integer from ${MIN_SEARCH_RESULTS} to ${MAX_SEARCH_RESULTS}`,
+    );
   }
   const timeout = options.timeout ?? 600;
   if (!Number.isFinite(timeout) || timeout <= 0) {
     throw new RangeError("timeout must be greater than 0 seconds");
   }
-  const normalized = normalizeSerpInput(url);
-  const body: Record<string, unknown> = {
-    query: normalized.query,
-    format: (options.raw ?? true) ? "html" : format,
-    renderJs: Boolean(options.render_js ?? false),
-  };
-  const region = options.region || normalized.region;
-  const language = options.language || normalized.language;
-  const page = options.page || normalized.page;
-  if (region != null) body.region = region;
-  if (language != null) body.language = language;
-  if (page != null) body.page = page;
-
-  return request<T>(
-    "POST",
-    "https://sync.scraper.mrscraper.com/api/google/serp/v2/sync",
-    body,
-    authHeaders(token),
-    timeout,
-    token,
-  );
+  const body: Record<string, unknown> = { action: "websearch", query: query.trim() };
+  if (country != null) body.country = country.trim();
+  body.numResults = numResults;
+  return request<T>("POST", API_URL, body, authHeaders(token), timeout, token);
 }

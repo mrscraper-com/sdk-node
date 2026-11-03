@@ -2,7 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { once } from "node:events";
-import * as sdk from "../dist/index.js";
+import * as publicApi from "../dist/index.js";
+// Format-specific helpers are internal: tested directly, never exported from the entry point.
+import * as sdk from "../dist/internal.js";
 
 const url = "https://example.com/listings?a=1&b=2";
 const token = "test-token";
@@ -12,6 +14,12 @@ async function withFetch(handler, run) {
   globalThis.fetch = handler;
   try { await run(); } finally { globalThis.fetch = original; }
 }
+
+test("internal format-specific helpers are not part of the public API", () => {
+  const helpers = ["scraper_html", "scraper_markdown", "get_screenshot", "scraper_json", "scraper_multiple_page", "scraper_sitemap", "scrape_brand", "get_brand"];
+  assert.deepEqual(Object.keys(sdk).sort(), [...helpers].sort());
+  for (const name of helpers) assert.equal(name in publicApi, false);
+});
 
 function noOutputs(params) {
   for (const name of ["html", "markdown", "screenshot"]) assert.equal(params.has(name), false);
@@ -86,7 +94,7 @@ for (const [name, expectedBody, output] of [
   ["scraper_multiple_page", { agent: "listing", prompt: "Extract all entry data as complete as possible.", maxPages: 3 }],
   ["scraper_sitemap", { agent: "map", maxDepth: 2, maxPages: 3, limit: 1000 }],
 ]) {
-  test(`${name} sends its Python service defaults`, async () => {
+  test(`${name} sends its service defaults`, async () => {
     await withFetch(async (input, init) => {
       const params = new URL(input).searchParams;
       assert.equal(init.method, "POST");
@@ -200,7 +208,7 @@ test("all service methods share authentication, runtime validation, and token re
   });
   for (const name of [...scraping, "get_brand"]) {
     await withFetch(async () => Response.json({ error: `bad ${token}` }, { status: 422 }), async () => {
-      await assert.rejects(sdk[name](url, { token }), (error) => error instanceof sdk.MrScraperError && error.status === 422 && !error.message.includes(token));
+      await assert.rejects(sdk[name](url, { token }), (error) => error instanceof publicApi.MrScraperError && error.status === 422 && !error.message.includes(token));
     });
   }
 });

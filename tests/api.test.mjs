@@ -12,8 +12,16 @@ async function withFetch(handler, run) {
   }
 }
 
-test("public API exposes service functions without the internal scraper API", () => {
-  assert.deepEqual(Object.keys(sdk).sort(), ["MrScraperError", "account", "get_brand", "get_screenshot", "scrape_brand", "scraper_html", "scraper_json", "scraper_markdown", "scraper_multiple_page", "scraper_sitemap", "web_search"]);
+test("public API exposes exactly scraper_api, web_search, and account", () => {
+  assert.deepEqual(Object.keys(sdk).sort(), ["MrScraperError", "account", "scraper_api", "web_search"]);
+  const methods = Object.entries(sdk).filter(([, value]) => typeof value === "function" && value !== sdk.MrScraperError);
+  assert.deepEqual(methods.map(([name]) => name).sort(), ["account", "scraper_api", "web_search"]);
+});
+
+test("package exports map exposes only the entry point", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const manifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  assert.deepEqual(Object.keys(manifest.exports), ["."]);
 });
 
 test("account uses an authenticated GET and returns a safe subscription summary", async () => {
@@ -104,47 +112,49 @@ test("account enforces its HTTP deadline while reading the body", async () => {
   });
 });
 
-test("scraper_html matches Python request mapping and parses JSON wrapper", async () => {
+test("scraper_api sends every option in the GET query string", async () => {
   await withFetch(async (input, init) => {
     const endpoint = new URL(input);
     const params = endpoint.searchParams;
     assert.equal(endpoint.origin, "https://api.mrscraper.com");
     assert.equal(endpoint.pathname, "/");
-    assert.equal(init.method, "POST");
-    assert.deepEqual(JSON.parse(init.body), {
-      url: "https://example.com/page",
-      maxRetries: 4,
-      tokenCap: 0,
-    });
+    assert.equal(init.method, "GET");
+    assert.equal(init.body, undefined);
     assert.equal(params.get("token"), "test-token");
+    assert.equal(params.get("url"), "https://example.com/page?a=1&b=2");
+    assert.equal(params.get("maxRetries"), "4");
+    assert.equal(params.get("tokenCap"), "0");
     assert.equal(params.get("timeout"), "45");
     assert.equal(params.get("geoCode"), "ID");
     assert.equal(params.get("proxyCountry"), "SG");
-    assert.equal(params.get("browserRendering"), "false");
+    assert.equal(params.get("browserRendering"), "true");
     assert.equal(params.get("super"), "true");
     assert.equal(params.get("useProxy"), "false");
     assert.equal(params.get("proxy"), "user:pass@proxy.example:8000");
     assert.equal(params.get("html"), "true");
-    assert.equal(params.has("markdown"), false);
+    assert.equal(params.get("markdown"), "true");
+    assert.equal(params.get("screenshot"), "true");
     assert.equal(params.get("waitForSelector"), ".ready");
     assert.equal(params.get("waitUntil"), "networkidle");
     assert.equal(params.get("warmStart"), "true");
-    assert.equal(params.has("screenshot"), false);
     assert.equal(params.get("blockResources"), "true");
     assert.equal(params.get("bypassProxy"), "true");
     assert.equal(params.get("cookieJar"), "domain=example.com&country=sg");
     assert.deepEqual(JSON.parse(params.get("headers")), { "accept-language": "en-US" });
     assert.equal(params.get("stream"), "false");
+    for (const key of ["agent", "prompt", "action", "bundle"]) assert.equal(params.has(key), false);
     assert.equal(init.headers.Authorization, "Bearer test-token");
     assert.equal(init.headers["x-api-token"], "test-token");
     assert.equal(init.headers["x-discard-token-secret"], "discard-secret");
-    return new Response('{"ok":true}', {
-      status: 200,
-      headers: { "content-type": "application/json", "x-test": "yes" },
+    return Response.json({ html: "<html></html>", markdown: "# Page", screenshot: "iVBORw0KGgo=" }, {
+      headers: { "x-test": "yes" },
     });
   }, async () => {
-    const result = await sdk.scraper_html("https://example.com/page", {
+    const result = await sdk.scraper_api("https://example.com/page?a=1&b=2", {
       token: "test-token",
+      html: true,
+      markdown: true,
+      screenshot: true,
       timeout: 45,
       geo_code: "ID",
       proxy_country: "SG",
@@ -152,12 +162,9 @@ test("scraper_html matches Python request mapping and parses JSON wrapper", asyn
       super: true,
       use_proxy: false,
       proxy: "user:pass@proxy.example:8000",
-      html: false,
-      markdown: true,
       wait_for_selector: ".ready",
       wait_until: "networkidle",
       home_page: true,
-      screenshot: true,
       block_resources: true,
       bypass_proxy: true,
       cookie_jar: "domain=example.com&country=sg",
@@ -167,79 +174,142 @@ test("scraper_html matches Python request mapping and parses JSON wrapper", asyn
       stream: false,
       discard_token_secret: "discard-secret",
     });
-    assert.deepEqual(result.data, { ok: true });
+    assert.deepEqual(result.data, { html: "<html></html>", markdown: "# Page", screenshot: "iVBORw0KGgo=" });
     assert.equal(result.status_code, 200);
     assert.equal(result.headers["x-test"], "yes");
   });
 });
 
-test("scraper_html defaults and explicit false values", async () => {
+test("scraper_api defaults to HTML only and returns the HTML string", async () => {
   await withFetch(async (input, init) => {
     const params = new URL(input).searchParams;
-    assert.deepEqual(JSON.parse(init.body), { url: "https://example.com", maxRetries: 3 });
+    assert.equal(init.method, "GET");
+    assert.equal(init.body, undefined);
+    assert.deepEqual([...params.keys()].sort(), ["geoCode", "html", "markdown", "maxRetries", "timeout", "token", "url"]);
+    assert.equal(params.get("url"), "https://example.com");
     assert.equal(params.get("geoCode"), "US");
     assert.equal(params.get("timeout"), "120");
+    assert.equal(params.get("maxRetries"), "3");
     assert.equal(params.get("html"), "true");
-    assert.equal(params.has("markdown"), false);
-    assert.equal(params.get("browserRendering"), "false");
-    for (const key of ["super", "useProxy", "screenshot", "warmStart", "blockResources", "stream"]) {
-      assert.equal(params.has(key), false);
-    }
-    return new Response("<html>ok</html>", { headers: { "content-type": "text/html" } });
+    assert.equal(params.get("markdown"), "false");
+    return new Response("<html>ok</html>", { headers: { "content-type": "text/html; charset=utf-8" } });
   }, async () => {
-    const result = await sdk.scraper_html("https://example.com", {
-      token: "test-token", browser_rendering: false,
-    });
+    const result = await sdk.scraper_api("https://example.com", { token: "test-token" });
     assert.equal(result.data, "<html>ok</html>");
   });
 });
 
-test("web_search normalizes URL, overrides URL values, and selects JSON", async () => {
+test("scraper_api supports each output alone and preserves explicit false values", async () => {
+  for (const [outputs, expected] of [
+    [{ html: false, markdown: true }, { html: "false", markdown: "true", screenshot: null, browserRendering: "false" }],
+    [{ html: false, screenshot: true }, { html: "false", markdown: "false", screenshot: "true", browserRendering: "true" }],
+  ]) {
+    await withFetch(async (input, init) => {
+      const params = new URL(input).searchParams;
+      assert.equal(init.method, "GET");
+      for (const [key, value] of Object.entries(expected)) assert.equal(params.get(key), value);
+      return Response.json({});
+    }, () => sdk.scraper_api("https://example.com", { token: "test-token", browser_rendering: false, ...outputs }));
+  }
+});
+
+test("scraper_api validates outputs and page options before sending", async () => {
+  await withFetch(async () => assert.fail("invalid input must not be sent"), async () => {
+    await assert.rejects(sdk.scraper_api("https://example.com", { token: "x", html: false }),
+      /At least one of html, markdown, or screenshot must be true/);
+    await assert.rejects(sdk.scraper_api("https://example.com", { token: "x", html: false, markdown: false, screenshot: false }), TypeError);
+    for (const name of ["html", "markdown", "screenshot"]) {
+      for (const value of ["true", 1, null, "full"]) {
+        await assert.rejects(sdk.scraper_api("https://example.com", { token: "x", [name]: value }), TypeError);
+      }
+    }
+    for (const timeout of [0, 301, Infinity, NaN]) {
+      await assert.rejects(sdk.scraper_api("https://example.com", { token: "x", timeout }), RangeError);
+    }
+    for (const max_retries of [-1, 0.5, NaN]) {
+      await assert.rejects(sdk.scraper_api("https://example.com", { token: "x", max_retries }), RangeError);
+    }
+    for (const token_cap of [-1, 0.5]) {
+      await assert.rejects(sdk.scraper_api("https://example.com", { token: "x", token_cap }), RangeError);
+    }
+    await assert.rejects(sdk.scraper_api("https://example.com", { token: "x", super: "true" }), TypeError);
+  });
+});
+
+test("web_search posts the websearch action with query, country, and numResults", async () => {
   await withFetch(async (input, init) => {
-    assert.equal(input, "https://sync.scraper.mrscraper.com/api/google/serp/v2/sync");
+    assert.equal(new URL(input).href, "https://api.mrscraper.com/");
+    assert.equal(new URL(input).search, "");
     assert.equal(init.method, "POST");
-    assert.equal(init.headers.Authorization, "Bearer test-token");
     assert.equal(init.headers["x-api-token"], "test-token");
+    assert.equal(init.headers["Content-Type"], "application/json");
     assert.deepEqual(JSON.parse(init.body), {
-      query: "running shoes", region: "id", language: "en", page: 4,
-      format: "json", renderJs: true,
+      action: "websearch", query: "e-menessaptieka.lv linkedin", country: "us", numResults: 25,
     });
-    return new Response('{"results":[]}', { headers: { "content-type": "application/json" } });
+    return Response.json({
+      success: true, message: "Search completed",
+      data: [{ rank: 1, title: "Result", url: "https://example.com", description: "About", source: "example.com" }],
+    });
   }, async () => {
-    const result = await sdk.web_search(
-      "https://www.google.com/search?q=running+shoes&gl=us&hl=fr&start=20",
-      { token: "test-token", raw: false, region: "id", language: "en", page: 4, render_js: true },
-    );
-    assert.deepEqual(result.data, { results: [] });
+    const result = await sdk.web_search("  e-menessaptieka.lv linkedin ", {
+      token: "test-token", country: " us ", num_results: 25,
+    });
+    assert.equal(result.status_code, 200);
+    assert.equal(result.data.success, true);
+    assert.deepEqual(result.data.data[0], {
+      rank: 1, title: "Result", url: "https://example.com", description: "About", source: "example.com",
+    });
   });
 });
 
-test("web_search defaults to HTML and derives page from start", async () => {
-  await withFetch(async (_input, init) => {
-    assert.deepEqual(JSON.parse(init.body), {
-      query: "iphone 17", region: "us", language: "en", page: 3,
-      format: "html", renderJs: false,
-    });
-    return new Response("<html>results</html>");
-  }, async () => {
-    const result = await sdk.web_search(
-      "https://www.google.com/search?q=iphone+17&gl=us&hl=en&start=20",
-      { token: "test-token" },
-    );
-    assert.equal(result.data, "<html>results</html>");
+test("web_search defaults numResults to 10 and omits an unset country", async () => {
+  for (const country of [undefined, null]) {
+    await withFetch(async (_input, init) => {
+      assert.deepEqual(JSON.parse(init.body), { action: "websearch", query: "python web scraping", numResults: 10 });
+      return Response.json({ success: true, message: "Search completed", data: [] });
+    }, () => sdk.web_search("python web scraping", { token: "test-token", country }));
+  }
+});
+
+test("web_search accepts the numResults bounds and validates inputs before sending", async () => {
+  for (const num_results of [10, 100]) {
+    await withFetch(async (_input, init) => {
+      assert.equal(JSON.parse(init.body).numResults, num_results);
+      return Response.json({ success: true, data: [] });
+    }, () => sdk.web_search("query", { token: "test-token", num_results }));
+  }
+  await withFetch(async () => assert.fail("invalid input must not be sent"), async () => {
+    for (const query of ["", "   ", undefined, 5]) {
+      await assert.rejects(sdk.web_search(query, { token: "x" }), TypeError);
+    }
+    for (const num_results of [9, 101, 0, 10.5, NaN, "10", true]) {
+      await assert.rejects(sdk.web_search("query", { token: "x", num_results }), RangeError);
+    }
+    for (const country of ["", "  ", 1]) {
+      await assert.rejects(sdk.web_search("query", { token: "x", country }), TypeError);
+    }
+    for (const timeout of [0, -1, Infinity, NaN]) {
+      await assert.rejects(sdk.web_search("query", { token: "x", timeout }), RangeError);
+    }
   });
 });
 
-test("errors carry status and do not disclose a query token", async () => {
+test("errors carry status and do not disclose a token", async () => {
   await withFetch(async () => new Response('{"message":"bad secret-token"}', {
     status: 422, headers: { "content-type": "application/json" },
   }), async () => {
     await assert.rejects(
-      sdk.scraper_html("https://example.com", { token: "secret-token" }),
+      sdk.scraper_api("https://example.com", { token: "secret-token" }),
       (error) => error instanceof sdk.MrScraperError && error.status === 422 && !error.message.includes("secret-token"),
     );
   });
-  await withFetch(async () => new Response("unauthorized", { status: 401 }), async () => {
+  await withFetch(async () => Response.json({ message: "numResults must be between 10 and 100" }, { status: 400 }), async () => {
+    await assert.rejects(
+      sdk.web_search("test", { token: "test-token" }),
+      (error) => error instanceof sdk.MrScraperError && error.status === 400 && /numResults/.test(error.message),
+    );
+  });
+  await withFetch(async () => Response.json({ message: "Unauthorized access", data: null }, { status: 401 }), async () => {
     await assert.rejects(
       sdk.web_search("test", { token: "bad-token" }),
       (error) => error instanceof sdk.MrScraperError && error.status === 401,
@@ -247,54 +317,28 @@ test("errors carry status and do not disclose a query token", async () => {
   });
 });
 
-test("validates options before sending", async () => {
-  await withFetch(async () => { throw new Error("should not fetch"); }, async () => {
-    await assert.rejects(sdk.scraper_html("https://example.com", { token: "x", timeout: 301 }), RangeError);
-    await assert.rejects(sdk.scraper_html("https://example.com", { token: "x", max_retries: -1 }), RangeError);
-    await assert.rejects(sdk.web_search("", { token: "x" }), TypeError);
-    await assert.rejects(sdk.web_search("https://google.com/search?hl=en", { token: "x" }), TypeError);
-    await assert.rejects(sdk.web_search("test", { token: "x", page: 0 }), RangeError);
-  });
-});
-
-test("web_search accepts plain query text with default HTML format", async () => {
-  await withFetch(async (_input, init) => {
-    assert.deepEqual(JSON.parse(init.body), {
-      query: "iphone 17", format: "html", renderJs: false,
+test("public methods reject missing credentials before fetching", async () => {
+  const original = process.env.MRSCRAPER_API_TOKEN;
+  try {
+    delete process.env.MRSCRAPER_API_TOKEN;
+    await withFetch(async () => assert.fail("should not fetch"), async () => {
+      await assert.rejects(sdk.scraper_api("https://example.com"), sdk.MrScraperError);
+      await assert.rejects(sdk.web_search("query"), sdk.MrScraperError);
     });
-    return new Response("<html>results</html>");
-  }, async () => {
-    const result = await sdk.web_search("  iphone 17  ", { token: "test-token" });
-    assert.equal(result.data, "<html>results</html>");
-  });
-});
-
-test("network failures have no HTTP status", async () => {
-  await withFetch(async () => { throw new Error("connection failed"); }, async () => {
-    await assert.rejects(
-      sdk.scraper_html("https://example.com", { token: "test-token" }),
-      (error) => error instanceof sdk.MrScraperError
-        && error.status === undefined
-        && error.message === "connection failed",
-    );
-  });
-});
-
-test("HTTP errors retain status with malformed, empty, or unreadable bodies", async () => {
-  for (const [status, body] of [[422, '{"error":"test-token"'], [503, ""]]) {
-    await withFetch(async () => new Response(body, {
-      status, headers: { "content-type": "application/json" },
-    }), async () => {
-      await assert.rejects(sdk.scraper_json("https://example.com", { token: "test-token" }),
-        (error) => error instanceof sdk.MrScraperError && error.status === status &&
-          !error.message.includes("test-token"));
-    });
+  } finally {
+    if (original !== undefined) process.env.MRSCRAPER_API_TOKEN = original;
   }
-  await withFetch(async () => ({
-    status: 502, ok: false,
-    text: async () => { throw new Error("response stream closed"); },
-  }), async () => {
-    await assert.rejects(sdk.get_brand("job-1", { token: "test-token" }),
-      (error) => error instanceof sdk.MrScraperError && error.status === 502);
+});
+
+test("network failures have no HTTP status and redact the token", async () => {
+  await withFetch(async () => { throw new Error("connection failed for test-token"); }, async () => {
+    for (const run of [
+      () => sdk.scraper_api("https://example.com", { token: "test-token" }),
+      () => sdk.web_search("query", { token: "test-token" }),
+    ]) {
+      await assert.rejects(run(), (error) => error instanceof sdk.MrScraperError
+        && error.status === undefined
+        && error.message === "connection failed for [REDACTED]");
+    }
   });
 });

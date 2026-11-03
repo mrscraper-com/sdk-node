@@ -2,7 +2,7 @@
 
 ![](./mrscraper.jpeg)
 
-Node.js SDK for [MrScraper](https://mrscraper.com) HTML, Markdown, screenshots, structured extraction, sitemap discovery, brand scraping, Web Search, and account status. Requires Node.js 18 or newer and ES modules.
+Node.js SDK for [MrScraper](https://mrscraper.com) page scraping, Web Search, and account status. Requires Node.js 18 or newer and ES modules.
 
 ## Install and authenticate
 
@@ -11,177 +11,140 @@ npm install @mrscraper/sdk
 export MRSCRAPER_API_TOKEN="YOUR_TOKEN"
 ```
 
-The SDK reads `MRSCRAPER_API_TOKEN` automatically. You can instead pass `token` in any call's options object. All functions are async and return `{ status_code, data, headers }`. JSON responses are parsed, HTML and other text remain strings, and images and ZIP files are returned as Node.js `Buffer` values in `data`.
+The SDK reads `MRSCRAPER_API_TOKEN` automatically. You can instead pass `token` in any call's options object. All functions are async and return `{ status_code, data, headers }`. JSON responses are parsed, HTML and other text remain strings, and binary responses are returned as Node.js `Buffer` values in `data`.
 
-## Service functions
+## Public functions
 
-These functions match the Python SDK's format-specific services. Each function selects its own output and agent; public options do not include `html`, `markdown`, or `screenshot` flags.
+| Function | Purpose |
+|----------|---------|
+| `scraper_api(url, options?)` | Fetch a public web page as rendered HTML, Markdown, screenshot, or a combination |
+| `web_search(query, options?)` | Search the web for real-time results: website URLs, titles, descriptions, and related questions |
+| `account(options?)` | Read account identity, subscription, quota, and rate limits |
 
-| Function | Purpose and parameters |
-|----------|----------------------|
-| `scraper_html(url, options)` | Retrieve HTML from `url` |
-| `scraper_markdown(url, options)` | Retrieve Markdown from `url` |
-| `get_screenshot(url, options)` | Capture a screenshot; `full_page=true`, `wait_until="domcontentloaded"`, `timeout=300` |
-| `scraper_json(url, options)` | Extract structured data using `prompt` |
-| `scraper_multiple_page(url, options)` | Extract listing entries using `prompt`; `max_pages=3` |
-| `scraper_sitemap(url, options)` | Discover site URLs; `max_depth=2`, `max_pages=3`, `limit=1000` |
-| `scrape_brand(url, options)` | Start a brand scraping job; `bundle="clean"` |
-| `get_brand(job_id, options)` | Read a job by `job_id`; optional `output` downloads a file |
-| `web_search(url, options)` | Retrieve real-time web search results |
-| `account(options)` | Read account identity, subscription, quota, and rate limits |
+The package also exports `MrScraperError` and the TypeScript types `ScraperApiOptions`, `ScraperApiData`, `WebSearchOptions`, `WebSearchResponse`, `WebSearchResult`, `AccountOptions`, `AccountSummary`, and `MrScraperResponse`.
 
-### Migrating from v3 to v4
+### Migrating from 4.x to 5.0
 
-Version 4 removes the public `scraper_api` function and `ScraperApiOptions` type. Replace calls with the appropriate service:
+Version 5.0.0 returns to three public functions. The format-specific functions from 4.x (`scraper_html`, `scraper_markdown`, `get_screenshot`, `scraper_json`, `scraper_multiple_page`, `scraper_sitemap`, `scrape_brand`, and `get_brand`) and their option types are no longer exported. Use `scraper_api` with output flags instead:
 
-```typescript
-import { scraper_html, scraper_markdown, get_screenshot } from "@mrscraper/sdk";
+| 4.x call | 5.0 replacement |
+|----------|-----------------|
+| `scraper_html(url, options)` | `scraper_api(url, options)` |
+| `scraper_markdown(url, options)` | `scraper_api(url, { ...options, html: false, markdown: true })` |
+| `get_screenshot(url, { full_page: false })` | `scraper_api(url, { html: false, screenshot: true })` |
+| `web_search(query, { region: "us" })` | `web_search(query, { country: "us" })` |
+| `ScraperOptions` type | `ScraperApiOptions` |
 
-const url = "https://example.com";
-// Previously: scraper_api(url, { html: true })
-const html = await scraper_html(url);
-// Previously: scraper_api(url, { html: false, markdown: true })
-const markdown = await scraper_markdown(url);
-// Previously: scraper_api(url, { screenshot: true })
-const screenshot = await get_screenshot(url);
-```
+Other changes:
 
-Import these functions from `@mrscraper/sdk`. Use `ScraperOptions` for shared page controls and the service option types below for specialized controls. To retrieve more than one format, call its service separately. Screenshots default to full-page capture; set `full_page: false` for a viewport screenshot. Binary data is preserved as a `Buffer`.
+- `scraper_api` sends a `GET` request with the target URL, page options, `maxRetries`, and `tokenCap` in the query string. Multiple outputs can be requested in one call.
+- A screenshot from `scraper_api` is a base64-encoded image (JPEG) in `data.screenshot`, not a `Buffer`.
+- `web_search` now calls the MrScraper API with `action: "websearch"`. Its first argument is the search query, and it accepts `country` and `num_results` (10 to 100). The `raw`, `format`, `region`, `language`, `page`, and `render_js` options and search URL input are removed. Results are returned as JSON.
+- `account` is unchanged.
 
-For older versions, `fetch_content` maps to `scraper_html`. Use the current function names listed above when upgrading. The response wrapper remains `{ status_code, data, headers }`.
+## Scraper API
 
-## HTML and Markdown
+Fetch a public web page as rendered HTML, Markdown, screenshot, or a combination. Common controls support JavaScript rendering, geolocation, proxies, cookies, custom target headers, and waiting for page content.
 
 ```typescript
-import { scraper_html, scraper_markdown } from "@mrscraper/sdk";
+import { writeFile } from "node:fs/promises";
+import { scraper_api } from "@mrscraper/sdk";
 
-const html = await scraper_html("https://example.com", { super: true });
-const markdown = await scraper_markdown("https://example.com", { home_page: true });
-console.log(html.data, markdown.data);
+const html = await scraper_api("https://books.toscrape.com/");
+console.log(html.data); // HTML string
+
+const combined = await scraper_api("https://books.toscrape.com/", {
+  html: true,
+  markdown: true,
+  screenshot: true,
+  proxy_country: "us",
+});
+if (typeof combined.data !== "string") {
+  console.log(combined.data.markdown);
+  if (combined.data.screenshot) {
+    await writeFile("page.jpg", Buffer.from(combined.data.screenshot, "base64"));
+  }
+}
 ```
 
-Use `scraper_html` or `scraper_markdown` for the desired page format. Both accept the shared scraping options below.
+Requesting only HTML (the default) returns the page as a string. Requesting Markdown or a screenshot returns an object with an entry for each requested output, such as `{ html, markdown, screenshot }`, where `screenshot` is a base64-encoded JPEG image. At least one of `html`, `markdown`, or `screenshot` must be `true`.
 
-### Shared scraping options
+The SDK sends a `GET` request to `https://api.mrscraper.com` with the API token in the `x-api-token` header and every option, including the target `url`, in the query string:
+
+```bash
+curl --get 'https://api.mrscraper.com' \
+--header 'x-api-token: {MRSCRAPER_API_TOKEN}' \
+--data-urlencode 'token={MRSCRAPER_API_TOKEN}' \
+--data-urlencode 'url=https://books.toscrape.com/' \
+--data-urlencode 'html=true' \
+--data-urlencode 'markdown=false' \
+--data-urlencode 'timeout=120' \
+--data-urlencode 'geoCode=US' \
+--data-urlencode 'maxRetries=3'
+```
 
 | Option | Default | Description |
 |--------|---------|-------------|
 | `token` | Environment variable | API token override |
-| `timeout` | `120` (`300` for screenshots) | Page timeout in seconds, from 1 to 300; HTTP timeout is 30 seconds longer |
-| `geo_code`, `proxy_country` | `"US"`, unset | Geolocation and optional proxy country |
-| `browser_rendering` | unset | `true` to force a browser, `false` to disable it, unset for automatic fallback; unavailable for screenshots, which always enable rendering |
+| `html`, `markdown`, `screenshot` | `true`, `false`, `false` | Outputs to return; combine as needed. `screenshot: true` enables browser rendering. |
+| `timeout` | `120` | Page timeout in seconds, from 1 to 300; the HTTP timeout is 30 seconds longer |
+| `geo_code`, `proxy_country` | `"US"`, unset | Geolocation country code and optional proxy country |
+| `browser_rendering` | unset | `true` to force a browser, `false` to disable it, unset for automatic selection |
 | `super` | `false` | Enable real device routing |
 | `use_proxy`, `proxy` | `true`, unset | Allow a proxy or supply `username:password@host:port` |
-| `home_page` | `false` | Visit the site's root before the target page |
-| `wait_for_selector` | unset | Wait for a CSS selector |
-| `wait_until` | unset (`"domcontentloaded"` for screenshots) | Browser navigation wait condition; `null` omits it |
-| `block_resources`, `bypass_proxy` | `false`, `false` | Block resources or enable proxy bypass behavior |
-| `cookie_jar`, `headers` | unset | Cookie configuration and target request headers; `headers` accepts an object or JSON string |
+| `home_page` | `false` | Visit the site's root before the target page (sent as `warmStart`) |
+| `wait_for_selector`, `wait_until` | unset | Wait for a CSS selector or a page lifecycle event such as `"domcontentloaded"` |
+| `block_resources`, `bypass_proxy` | `false`, `false` | Block images, CSS, and fonts, or enable proxy bypass behavior |
+| `cookie_jar`, `headers` | unset | Cookie configuration string and target request headers; `headers` accepts an object or JSON string |
 | `max_retries`, `token_cap` | `3`, unset | Nonnegative integer retry count and optional token budget |
 | `stream` | unset | Request a streamed response, buffered into the normal return value |
-| `discard_token_secret` | `""` | Value for the `x-discard-token-secret` API header |
+| `discard_token_secret` | `""` | Value for the `x-discard-token-secret` request header |
 
 Unset options use the service defaults. Explicit `false`, `0`, and empty strings are preserved where supported.
 
-## Screenshots
-
-```typescript
-import { writeFile } from "node:fs/promises";
-import { get_screenshot } from "@mrscraper/sdk";
-
-const result = await get_screenshot("https://example.com", {
-  full_page: true, // Default; false captures the viewport.
-  token_cap: 30,
-});
-if (Buffer.isBuffer(result.data)) await writeFile("page.png", result.data);
-else console.log(result.data); // The API may also return JSON metadata.
-```
-
-## JSON and multiple-page extraction
-
-```typescript
-import { scraper_json, scraper_multiple_page } from "@mrscraper/sdk";
-
-const page = await scraper_json("https://mrscraper.com/pricing", {
-  prompt: "Extract all plan names and prices.",
-  super: true,
-});
-const listings = await scraper_multiple_page("https://books.toscrape.com", {
-  prompt: "Extract each book title and price.",
-  max_pages: 3,
-});
-console.log(page.data, listings.data);
-```
-
-`ScraperJsonOptions.prompt` defaults to `"Extract all data as complete as possible."`. `ScraperMultiplePageOptions.prompt` defaults to `"Extract all entry data as complete as possible."`, and `max_pages` must be a positive integer. Set `prompt` to describe the data to extract and `max_pages` to limit pagination.
-
-## Sitemap discovery
-
-```typescript
-import { scraper_sitemap } from "@mrscraper/sdk";
-
-const result = await scraper_sitemap("https://docs.mrscraper.com", {
-  max_depth: 2,
-  max_pages: 3,
-  limit: 1000,
-  include_patterns: String.raw`/products/.*`,
-  exclude_patterns: String.raw`/blog/.*`,
-});
-console.log(result.data);
-```
-
-`ScraperSitemapOptions` supports `max_depth`, `max_pages`, `limit`, `include_patterns`, and `exclude_patterns`. Pattern strings are forwarded unchanged; unset or `null` patterns are omitted. `max_depth` must be a nonnegative integer; `max_pages` and `limit` must be positive integers.
-
-## Brand scraping and downloads
-
-```typescript
-import { writeFile } from "node:fs/promises";
-import { scrape_brand, get_brand } from "@mrscraper/sdk";
-
-const created = await scrape_brand("https://www.brooksrunning.com", { bundle: "clean" });
-console.log(created.data); // Read the job ID from the API response.
-
-const jobId = "JOB_ID_FROM_RESPONSE";
-const job = await get_brand(jobId);
-console.log(job.data); // Check job status before downloading.
-
-const download = await get_brand(jobId, { output: "bundle" });
-if (Buffer.isBuffer(download.data)) await writeFile("brand.zip", download.data);
-```
-
-`ScrapeBrandOptions.bundle` accepts `"clean"` (default), `"full"`, or `"none"`. `GetBrandOptions` accepts `token`, `timeout` (default `600` seconds), and optional `output`: `"html"`, `"bundle"`, `"screenshot"`, or `"screenshot_full"`. Omit `output` to read the job. HTML is text; ZIP and image downloads are `Buffer` values. The SDK makes one request per call and does not poll for completion.
-
 ## Web Search
 
-Search the web to retrieve real-time search results, including relevant website URLs, titles, descriptions, and related questions based on a given query.
+Searches the web to retrieve real-time results, including relevant website URLs, titles, descriptions, and related questions based on a given query.
 
 ```typescript
 import { web_search } from "@mrscraper/sdk";
 
-const result = await web_search("python web scraping", {
-  raw: false,
-  region: "us",
-  language: "en",
-  page: 1,
-  format: "json",
+const result = await web_search("e-menessaptieka.lv linkedin", {
+  country: "us",
+  num_results: 10,
 });
-console.log(result.data);
+for (const item of result.data.data) {
+  console.log(item.rank, item.title, item.url);
+}
 ```
 
-`web_search` accepts a search query as its first argument. `raw: true` is the default and requests HTML regardless of `format`. Set `raw: false` to use `format`.
+The SDK sends this request:
+
+```bash
+curl --location 'https://api.mrscraper.com' \
+--header 'x-api-token: {MRSCRAPER_API_TOKEN}' \
+--header 'Content-Type: application/json' \
+--data '{
+    "action": "websearch",
+    "query": "e-menessaptieka.lv linkedin",
+    "country": "us",
+    "numResults": 10
+}'
+```
+
+`result.data` is a `WebSearchResponse` with `success`, `message`, and `data`. Each item in `data` is a `WebSearchResult` with `rank`, `title`, `url`, `description`, and `source`.
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `url` | Required first argument | The search query |
+| `query` | Required first argument | The search query; must not be empty |
 | `token` | Environment variable | API token override |
-| `raw` | `true` | Request HTML when true |
-| `format` | `"json"` | `"json"` or `"html"` when `raw` is false |
-| `region`, `language` | unset | Country and language |
-| `page` | unset | Results page number, starting at `1` |
-| `render_js` | `false` | Render JavaScript features |
+| `country` | unset | Country code for localized results, such as `"us"`; omitted to use the service default |
+| `num_results` | `10` | Number of results, an integer from 10 to 100 (sent as `numResults`) |
 | `timeout` | `600` | HTTP request timeout in seconds |
 
 ## Account status
+
+Account returns an overview of the account associated with your API token, including user identity, subscription status, token usage, remaining quota, and rate limits. Use it to monitor consumption and check available tokens before running scraping or search jobs.
 
 ```typescript
 import { account } from "@mrscraper/sdk";
@@ -201,14 +164,14 @@ API keys, billing identifiers, and sensitive response headers are excluded.
 
 ## Errors and types
 
-All functions reject with `MrScraperError` for API, authentication, network, and timeout errors. `status` contains the HTTP status for API errors and is `undefined` for network errors. Invalid options throw `TypeError` or `RangeError`.
+All functions reject with `MrScraperError` for API, authentication, network, and timeout errors. `status` contains the HTTP status for API errors and is `undefined` for network errors. Invalid options throw `TypeError` or `RangeError` before any request is sent.
 
 ```typescript
-import { scraper_html, MrScraperError } from "@mrscraper/sdk";
-import type { ScraperOptions, ScraperSitemapOptions, MrScraperResponse } from "@mrscraper/sdk";
+import { scraper_api, MrScraperError } from "@mrscraper/sdk";
+import type { MrScraperResponse, ScraperApiData } from "@mrscraper/sdk";
 
 try {
-  const result: MrScraperResponse = await scraper_html("https://example.com");
+  const result: MrScraperResponse<ScraperApiData> = await scraper_api("https://example.com");
   console.log(result.data);
 } catch (error) {
   if (error instanceof MrScraperError) {
@@ -227,7 +190,7 @@ npm test
 npm run build
 ```
 
-`npm test` builds the SDK, checks TypeScript usage (including rejected output flags), and runs response-mock and local HTTP contract tests. It does not call the live API or require a token.
+`npm test` builds the SDK, checks TypeScript usage, and runs response-mock and local HTTP contract tests. It does not call the live API or require a token.
 
 ## Manual tests with a real token
 
@@ -238,7 +201,18 @@ npm run build
 export MRSCRAPER_API_TOKEN="YOUR_TOKEN"
 ```
 
-Check account status directly through the built SDK:
+The `file.js` helper calls the three public functions against the live API:
+
+```bash
+node file.js --help
+node file.js                      # account, scraper_api (HTML), and web_search
+node file.js account
+node file.js scraper_api "https://books.toscrape.com/"
+node file.js scraper_api "https://books.toscrape.com/" '{"markdown":true,"screenshot":true}'
+node file.js web_search "e-menessaptieka.lv linkedin" '{"country":"us","num_results":10}'
+```
+
+Screenshots are saved under `manual-results/`; other responses are previewed. You can also call the built SDK directly:
 
 ```bash
 node --input-type=module <<'NODE'
@@ -249,34 +223,12 @@ console.log(result.status_code, result.data);
 NODE
 ```
 
-Retrieve Markdown:
-
-```bash
-node --input-type=module <<'NODE'
-import { scraper_markdown } from "./dist/index.js";
-
-const result = await scraper_markdown("https://example.com");
-console.log(result.status_code, result.data);
-NODE
-```
-
-Start a brand-scraping job:
-
-```bash
-node --input-type=module <<'NODE'
-import { scrape_brand } from "./dist/index.js";
-
-const result = await scrape_brand("https://example.com");
-console.log(result.status_code, result.data);
-NODE
-```
-
-Use the job ID from the response with `get_brand` as shown in [Brand scraping and downloads](#brand-scraping-and-downloads). These commands make live API requests, print the HTTP status and response data, and exit with a nonzero status on unhandled errors. They do not depend on the local `file.js` helper. To run the other service examples from a checkout, replace imports from `@mrscraper/sdk` with `./dist/index.js`.
+These commands make live API requests, print the HTTP status and response data, and exit with a nonzero status on errors. To run the other examples from a checkout, replace imports from `@mrscraper/sdk` with `./dist/index.js`.
 
 ## Publish manually to npm
 
-This checkout prepares documentation patch **4.0.1**. Version **4.0.0** is
-already published. Publishing remains manual. Validate and preview the package:
+This checkout prepares version **5.0.0**, a major release that removes the 4.x
+format-specific functions. Publishing remains manual. Validate and preview the package:
 
 ```bash
 npm ci
