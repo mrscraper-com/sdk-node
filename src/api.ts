@@ -40,60 +40,51 @@ export interface AccountSummary {
   };
 }
 
-/** Options for `scraper_api`. At least one of html, markdown, or screenshot must be true. */
-export interface ScraperApiOptions {
-  /** Overrides MRSCRAPER_API_TOKEN for this call. */
+export type WaitUntil =
+  "domcontentloaded" | "load" | "networkidle0" | "networkidle2";
+export interface PageOptions {
   token?: string;
-  /** Return the page HTML. Defaults to true. */
+  timeout?: number;
+  geoCode?: string;
+  proxyCountry?: string;
+  superMode?: boolean;
+  waitUntil?: WaitUntil;
+  proxy?: string;
+  maxRetries?: number;
+  saveResult?: boolean;
+}
+export interface LoadingOptions {
+  blockResources?: boolean;
+  waitForSelector?: string;
+  returnCookie?: boolean;
+}
+export interface HtmlOptions extends PageOptions, LoadingOptions {
+  browserRendering?: boolean;
+}
+export interface MarkdownOptions extends HtmlOptions {
   html?: boolean;
-  /** Return the page as Markdown. Defaults to false. */
+}
+export interface ScreenshotOptions extends PageOptions, LoadingOptions {
+  screenshot?: "full" | "top";
+  html?: boolean;
   markdown?: boolean;
-  /** Capture a screenshot. Defaults to false; true also enables browser rendering. */
+}
+export interface JsonOptions extends PageOptions {
+  prompt?: string;
+  browserRendering?: boolean;
+  html?: boolean;
   screenshot?: boolean;
-  /** Page timeout in seconds, from 1 to 300. Defaults to 120. */
-  timeout?: number;
-  geo_code?: string;
-  proxy_country?: string | null;
-  block_resources?: boolean | null;
-  browser_rendering?: boolean | null;
-  super?: boolean;
-  use_proxy?: boolean;
-  proxy?: string | null;
-  wait_for_selector?: string | null;
-  wait_until?: string | null;
-  home_page?: boolean;
-  bypass_proxy?: boolean;
-  cookie_jar?: string | null;
-  /** Headers forwarded to the target site, not the API request. */
-  headers?: Record<string, string> | string | null;
-  max_retries?: number;
-  token_cap?: number | null;
-  stream?: boolean | null;
-  discard_token_secret?: string;
 }
-
-/**
- * `scraper_api` data: an HTML string when only HTML is requested, otherwise an
- * object with an entry for each requested output (the screenshot is base64).
- */
-export type ScraperApiData = string | {
-  html?: string;
-  markdown?: string;
-  screenshot?: string;
-  [key: string]: unknown;
-};
-
-export interface WebSearchOptions {
-  /** Overrides MRSCRAPER_API_TOKEN for this call. */
+export interface BrandOptions {
   token?: string;
-  /** Country code for localized results, such as "us". Omitted when unset. */
-  country?: string | null;
-  /** Number of results, an integer from 10 to 100. Defaults to 10. */
-  num_results?: number;
-  /** HTTP request timeout in seconds. Defaults to 600. */
+}
+export interface WebSearchOptions {
+  token?: string;
+  country?: string;
+  numResults?: number;
+  /** Local HTTP deadline in seconds. Defaults to 120. */
   timeout?: number;
 }
-
 export interface WebSearchResult {
   rank: number;
   title: string;
@@ -101,22 +92,29 @@ export interface WebSearchResult {
   description: string;
   source: string;
 }
-
 export interface WebSearchResponse {
   success: boolean;
   message: string;
   data: WebSearchResult[];
 }
-
-const API_URL = "https://api.mrscraper.com";
-const MIN_SEARCH_RESULTS = 10;
-const MAX_SEARCH_RESULTS = 100;
-
+export type PageData =
+  | string
+  | {
+      html?: string;
+      markdown?: string;
+      screenshot?: string;
+      [key: string]: unknown;
+    };
+export const DEFAULT_JSON_PROMPT = "Extract all data as complete as possible.";
 // The helpers below are exported for the SDK's internal modules only; the
 // package entry point (index.ts) does not re-export them.
 
 export function requireToken(explicitToken?: string): string {
-  const token = explicitToken || process.env.MRSCRAPER_API_TOKEN || "";
+  const token =
+    explicitToken ||
+    process.env.MRSCRAPER_API_TOKEN ||
+    process.env.MRSCRAPER_API_KEY ||
+    "";
   if (!token.trim()) {
     throw new MrScraperError(
       "API token is not set. Pass token in the options or set MRSCRAPER_API_TOKEN. Get your token at https://app.mrscraper.com.",
@@ -132,12 +130,6 @@ export function authHeaders(token: string): Record<string, string> {
     Authorization: `Bearer ${token}`,
     "x-api-token": token,
   };
-}
-
-export function setIfPresent(params: URLSearchParams, key: string, value: unknown): void {
-  if (value !== null && value !== undefined) {
-    params.set(key, typeof value === "boolean" ? String(value) : String(value));
-  }
 }
 
 export async function request<T>(
@@ -171,14 +163,29 @@ export async function request<T>(
       } catch {
         // The HTTP status remains useful even when an error body cannot be read.
       }
-      throw new MrScraperError(message.replaceAll(token, "[REDACTED]"), response.status);
+      throw new MrScraperError(
+        message.replaceAll(token, "[REDACTED]"),
+        response.status,
+      );
     }
-    const contentType = (response.headers.get("content-type") ?? "").split(";", 1)[0].trim().toLowerCase();
-    const isText = !contentType || contentType.startsWith("text/") ||
-      ["application/xml", "application/xhtml+xml", "application/javascript"].includes(contentType);
-    const data = contentType === "application/json" || contentType.endsWith("+json")
-      ? await response.json()
-      : isText ? await response.text() : Buffer.from(await response.arrayBuffer());
+    const contentType = (response.headers.get("content-type") ?? "")
+      .split(";", 1)[0]
+      .trim()
+      .toLowerCase();
+    const isText =
+      !contentType ||
+      contentType.startsWith("text/") ||
+      [
+        "application/xml",
+        "application/xhtml+xml",
+        "application/javascript",
+      ].includes(contentType);
+    const data =
+      contentType === "application/json" || contentType.endsWith("+json")
+        ? await response.json()
+        : isText
+          ? await response.text()
+          : Buffer.from(await response.arrayBuffer());
     return {
       status_code: response.status,
       data: data as T,
@@ -207,7 +214,7 @@ export async function account(
   }
   const response = await request<unknown>(
     "GET",
-    "https://api.app.mrscraper.com/api/v1/subscription-accounts",
+    `${(process.env.MRSCRAPER_API_BASE_URL || "https://api.app.mrscraper.com/api/v1").replace(/\/+$/, "")}/subscription-accounts`,
     undefined,
     authHeaders(token),
     timeout,
@@ -218,7 +225,10 @@ export async function account(
   const body = response.data;
   const details = isRecord(body) && "data" in body ? body.data : body;
   if (!isRecord(details)) {
-    throw new MrScraperError("Account response must contain an object", response.status_code);
+    throw new MrScraperError(
+      "Account response must contain an object",
+      response.status_code,
+    );
   }
   const numberOrZero = (value: unknown): number => {
     const parsed = Number(value);
@@ -238,7 +248,10 @@ export async function account(
       token_usage: tokenUsage,
       token_limit: tokenLimit,
       token_remaining: Math.max(0, tokenLimit - tokenUsage),
-      usage_percent: tokenLimit > 0 ? Number(((tokenUsage / tokenLimit) * 100).toFixed(2)) : 0,
+      usage_percent:
+        tokenLimit > 0
+          ? Number(((tokenUsage / tokenLimit) * 100).toFixed(2))
+          : 0,
       rate_limit: numberOrZero(details.rateLimit),
       rate_ttl: numberOrZero(details.rateTtl),
       auto_renew: Boolean(details.isAutoRenew),
@@ -249,185 +262,251 @@ export async function account(
         verified: Boolean(user.isVerified),
       },
     },
-    headers: Object.fromEntries(Object.entries(response.headers).filter(([key]) =>
-      !["authorization", "proxy-authorization", "set-cookie", "set-cookie2", "x-api-token"].includes(key.toLowerCase()),
-    )),
+    headers: Object.fromEntries(
+      Object.entries(response.headers).filter(
+        ([key]) =>
+          ![
+            "authorization",
+            "proxy-authorization",
+            "set-cookie",
+            "set-cookie2",
+            "x-api-token",
+          ].includes(key.toLowerCase()),
+      ),
+    ),
   };
 }
 
-/** Shared page, browser, proxy, and retry controls without output flags. */
-export type ScrapeOptions = Omit<ScraperApiOptions, "html" | "markdown" | "screenshot">;
-
-/** Output, method, and agent selection made by the SDK rather than by caller options. */
-export interface ScrapeRequest {
-  method?: "GET" | "POST";
-  html?: boolean;
-  markdown?: boolean;
-  screenshot?: true | "full";
-  agent?: "general" | "listing" | "map";
-  prompt?: string;
-  max_pages?: number;
-  max_depth?: number;
-  limit?: number;
-  include_patterns?: string | null;
-  exclude_patterns?: string | null;
-  action?: "brand-scraping";
-  bundle?: "clean" | "full" | "none";
+function integer(
+  name: string,
+  value: number,
+  min: number,
+  max = Number.MAX_SAFE_INTEGER,
+): number {
+  if (!Number.isSafeInteger(value) || value < min || value > max)
+    throw new RangeError(`${name} must be an integer from ${min} to ${max}`);
+  return value;
 }
-
-function validateInteger(name: string, value: number | undefined, minimum: number): void {
-  if (value !== undefined && (!Number.isInteger(value) || value < minimum)) {
-    throw new RangeError(`${name} must be an integer greater than or equal to ${minimum}`);
+function text(name: string, value: string): string {
+  if (typeof value !== "string" || !value.trim())
+    throw new TypeError(`${name} must be a non-empty string`);
+  return value.trim();
+}
+function pageUrl(value: string): string {
+  let parsed: URL | undefined;
+  try {
+    parsed = new URL(value);
+  } catch {
+    /* Consistent error below. */
   }
+  if (!parsed || !["http:", "https:"].includes(parsed.protocol))
+    throw new TypeError("url must be an absolute HTTP or HTTPS URL");
+  return value;
 }
-
-/**
- * Build and send a scraping request for `scraper_api` and the internal
- * format-specific helpers. GET and brand requests carry the URL and retry
- * controls in the query; other POSTs carry them in the JSON body.
- */
-export async function scrape<T>(
+function country(name: string, value: string): string {
+  if (typeof value !== "string" || !/^[a-z]{2}$/i.test(value))
+    throw new TypeError(`${name} must be a two-letter country code`);
+  return value.toLowerCase();
+}
+function boolean(name: string, value: boolean): boolean {
+  if (typeof value !== "boolean")
+    throw new TypeError(`${name} must be a boolean`);
+  return value;
+}
+function pageParams(
   url: string,
-  options: ScrapeOptions,
-  selected: ScrapeRequest,
+  options: PageOptions,
+): Record<string, string | number | boolean> {
+  const {
+    timeout = 300,
+    geoCode = "us",
+    proxyCountry = "us",
+    superMode = false,
+    waitUntil = "domcontentloaded",
+    proxy,
+    maxRetries,
+    saveResult = false,
+  } = options;
+  if (
+    !["domcontentloaded", "load", "networkidle0", "networkidle2"].includes(
+      waitUntil,
+    )
+  )
+    throw new TypeError("Invalid waitUntil event");
+  const params: Record<string, string | number | boolean> = {
+    url: pageUrl(url),
+    timeout: integer("timeout", timeout, 1, 300),
+    geoCode: country("geoCode", geoCode),
+    proxyCountry: country("proxyCountry", proxyCountry),
+    super: boolean("superMode", superMode),
+    waitUntil,
+    saveResult: boolean("saveResult", saveResult),
+  };
+  if (proxy !== undefined) params.proxy = text("proxy", proxy);
+  if (maxRetries !== undefined)
+    params.maxRetries = integer("maxRetries", maxRetries, 0);
+  return params;
+}
+function loadingParams(
+  options: LoadingOptions,
+): Record<string, string | number | boolean> {
+  const params: Record<string, string | number | boolean> = {
+    blockResources: boolean("blockResources", options.blockResources ?? false),
+    returnCookie: boolean("returnCookie", options.returnCookie ?? false),
+  };
+  if (options.waitForSelector !== undefined)
+    params.waitForSelector = text("waitForSelector", options.waitForSelector);
+  return params;
+}
+function endpoint(params: Record<string, string | number | boolean>): string {
+  const result = new URL(
+    process.env.MRSCRAPER_FETCH_BASE_URL || "https://api.mrscraper.com",
+  );
+  for (const [key, value] of Object.entries(params))
+    result.searchParams.set(key, String(value));
+  return result.toString();
+}
+async function get<T>(
+  params: Record<string, string | number | boolean>,
+  options: BrandOptions,
+  timeout: number,
 ): Promise<MrScraperResponse<T>> {
   const token = requireToken(options.token);
-  const timeout = options.timeout ?? 120;
-  const maxRetries = options.max_retries ?? 3;
-  if (!Number.isFinite(timeout) || timeout < 1 || timeout > 300) {
-    throw new RangeError("timeout must be between 1 and 300 seconds");
-  }
-  validateInteger("max_retries", maxRetries, 0);
-  if (options.token_cap != null) validateInteger("token_cap", options.token_cap, 0);
-  validateInteger("max_pages", selected.max_pages, 1);
-  validateInteger("max_depth", selected.max_depth, 0);
-  validateInteger("limit", selected.limit, 1);
-  if (selected.bundle !== undefined && !["clean", "full", "none"].includes(selected.bundle)) {
-    throw new TypeError("bundle must be 'clean', 'full', or 'none'");
-  }
-  if (options.super !== undefined && typeof options.super !== "boolean") {
-    throw new TypeError("super must be a boolean");
-  }
-  for (const [name, pattern] of [["include_patterns", selected.include_patterns], ["exclude_patterns", selected.exclude_patterns]]) {
-    if (pattern != null && typeof pattern !== "string") throw new TypeError(`${name} must be a string`);
-  }
-
-  const method = selected.method ?? "POST";
-  const queryRetries = method === "GET" || selected.action === "brand-scraping";
-  const params = new URLSearchParams();
-  setIfPresent(params, "token", token);
-  setIfPresent(params, "timeout", timeout);
-  setIfPresent(params, "geoCode", options.geo_code ?? "US");
-  setIfPresent(params, "proxyCountry", options.proxy_country);
-  setIfPresent(params, "browserRendering", selected.screenshot ? true : options.browser_rendering);
-  setIfPresent(params, "super", options.super ? true : null);
-  setIfPresent(params, "useProxy", options.use_proxy === false ? false : null);
-  setIfPresent(params, "proxy", options.proxy);
-  setIfPresent(params, "html", selected.html);
-  setIfPresent(params, "markdown", selected.markdown);
-  setIfPresent(params, "waitForSelector", options.wait_for_selector);
-  setIfPresent(params, "waitUntil", options.wait_until);
-  setIfPresent(params, "warmStart", options.home_page ? true : null);
-  setIfPresent(params, "screenshot", selected.screenshot);
-  setIfPresent(params, "blockResources", options.block_resources ? true : null);
-  setIfPresent(params, "bypassProxy", options.bypass_proxy ? true : null);
-  setIfPresent(params, "cookieJar", options.cookie_jar);
-  setIfPresent(
-    params,
-    "headers",
-    typeof options.headers === "object" && options.headers !== null
-      ? JSON.stringify(options.headers)
-      : options.headers,
+  return request<T>(
+    "GET",
+    endpoint(params),
+    undefined,
+    authHeaders(token),
+    timeout,
+    token,
   );
-  setIfPresent(params, "stream", options.stream);
-  if (queryRetries) {
-    setIfPresent(params, "url", url);
-    setIfPresent(params, "maxRetries", maxRetries);
-    setIfPresent(params, "tokenCap", options.token_cap);
-  }
-  setIfPresent(params, "action", selected.action);
-  setIfPresent(params, "bundle", selected.bundle);
-
-  const headers = authHeaders(token);
-  if (options.discard_token_secret) headers["x-discard-token-secret"] = options.discard_token_secret;
-  const body: Record<string, unknown> = { url };
-  if (!queryRetries) {
-    body.maxRetries = maxRetries;
-    if (options.token_cap != null) body.tokenCap = options.token_cap;
-  }
-  const fields = {
-    prompt: selected.prompt,
-    agent: selected.agent,
-    maxPages: selected.max_pages,
-    maxDepth: selected.max_depth,
-    limit: selected.limit,
-    includePatterns: selected.include_patterns,
-    excludePatterns: selected.exclude_patterns,
-  };
-  for (const [name, value] of Object.entries(fields)) {
-    if (value != null) body[name] = value;
-  }
-  return request<T>(method, `${API_URL}/?${params}`,
-    method === "GET" ? undefined : body, headers, timeout + 30, token);
 }
-
-/**
- * Fetch a public web page as rendered HTML, Markdown, screenshot, or a combination.
- *
- * Sends a GET request; the target URL, page options, and retry controls are all
- * query parameters. HTML alone returns a string; any combination with Markdown
- * or a screenshot returns an object such as `{ html, markdown, screenshot }`,
- * where the screenshot is base64. At least one output must be true.
- */
-export async function scraper_api<T = ScraperApiData>(
+/** Retrieve raw HTML using the CLI's page and loading defaults. */
+export async function scrapeHtml<T = PageData>(
   url: string,
-  options: ScraperApiOptions = {},
+  options: HtmlOptions = {},
 ): Promise<MrScraperResponse<T>> {
-  const { html = true, markdown = false, screenshot = false, ...rest } = options;
-  for (const [name, value] of [["html", html], ["markdown", markdown], ["screenshot", screenshot]] as const) {
-    if (typeof value !== "boolean") throw new TypeError(`${name} must be a boolean`);
-  }
-  if (!html && !markdown && !screenshot) {
-    throw new TypeError("At least one of html, markdown, or screenshot must be true");
-  }
-  return scrape<T>(url, rest, {
-    method: "GET",
-    html,
-    markdown,
-    screenshot: screenshot ? true : undefined,
-  });
+  const params: Record<string, string | number | boolean> = {
+    ...pageParams(url, options),
+    ...loadingParams(options),
+    browserRendering: boolean(
+      "browserRendering",
+      options.browserRendering ?? false,
+    ),
+    html: true,
+    markdown: false,
+    screenshot: false,
+  };
+  return get<T>(params, options, Number(params.timeout) + 30);
 }
-
-/**
- * Search the web for real-time results: website URLs, titles, and descriptions.
- *
- * Sends `{ action: "websearch", query, country, numResults }` as a JSON POST
- * to the MrScraper API. `country` is omitted when unset.
- */
-export async function web_search<T = WebSearchResponse>(
+/** Retrieve Markdown. html=true also returns HTML and forces browser rendering. */
+export async function scrapeMarkdown<T = PageData>(
+  url: string,
+  options: MarkdownOptions = {},
+): Promise<MrScraperResponse<T>> {
+  const html = boolean("html", options.html ?? false);
+  const browserRendering = boolean(
+    "browserRendering",
+    options.browserRendering ?? false,
+  );
+  const params: Record<string, string | number | boolean> = {
+    ...pageParams(url, options),
+    ...loadingParams(options),
+    browserRendering: html || browserRendering,
+    html,
+    markdown: true,
+    screenshot: false,
+  };
+  return get<T>(params, options, Number(params.timeout) + 30);
+}
+/** Capture a base64 full-page or top-viewport screenshot with browser rendering enabled. */
+export async function getScreenshot<T = PageData>(
+  url: string,
+  options: ScreenshotOptions = {},
+): Promise<MrScraperResponse<T>> {
+  const screenshot = options.screenshot ?? "full";
+  if (!["full", "top"].includes(screenshot))
+    throw new TypeError("screenshot must be full or top");
+  const params: Record<string, string | number | boolean> = {
+    ...pageParams(url, options),
+    ...loadingParams(options),
+    browserRendering: true,
+    screenshot,
+    html: boolean("html", options.html ?? true),
+    markdown: boolean("markdown", options.markdown ?? false),
+  };
+  return get<T>(params, options, Number(params.timeout) + 30);
+}
+/** Extract JSON with agent=general; prompts over the 8 KB URL limit use POST. */
+export async function scrapeJson<T = unknown>(
+  url: string,
+  options: JsonOptions = {},
+): Promise<MrScraperResponse<T>> {
+  const prompt = options.prompt ?? DEFAULT_JSON_PROMPT;
+  text("prompt", prompt);
+  const params: Record<string, string | number | boolean> = {
+    ...pageParams(url, options),
+    browserRendering: boolean(
+      "browserRendering",
+      options.browserRendering ?? false,
+    ),
+    html: boolean("html", options.html ?? false),
+    screenshot: boolean("screenshot", options.screenshot ?? false),
+    agent: "general",
+    prompt,
+  };
+  const token = requireToken(options.token);
+  const timeout = Number(params.timeout) + 30;
+  const getUrl = endpoint(params);
+  if (getUrl.length <= 8000)
+    return request<T>(
+      "GET",
+      getUrl,
+      undefined,
+      authHeaders(token),
+      timeout,
+      token,
+    );
+  const { url: target, prompt: instruction, agent, ...query } = params;
+  return request<T>(
+    "POST",
+    endpoint(query),
+    { url: target, prompt: instruction, agent },
+    authHeaders(token),
+    timeout,
+    token,
+  );
+}
+/** Extract a website's brand as JSON (bundle=none). */
+export async function scrapeBrand<T = unknown>(
+  url: string,
+  options: BrandOptions = {},
+): Promise<MrScraperResponse<T>> {
+  return get<T>(
+    { action: "brand-scraping", url: pageUrl(url), bundle: "none" },
+    options,
+    120,
+  );
+}
+/** Search the web for ranked titles, URLs, descriptions, and sources. */
+export async function webSearch<T = WebSearchResponse>(
   query: string,
   options: WebSearchOptions = {},
 ): Promise<MrScraperResponse<T>> {
-  const token = requireToken(options.token);
-  if (typeof query !== "string" || !query.trim()) {
-    throw new TypeError("A search query is required");
-  }
-  const country = options.country;
-  if (country != null && (typeof country !== "string" || !country.trim())) {
-    throw new TypeError("country must be a non-empty string");
-  }
-  const numResults = options.num_results ?? MIN_SEARCH_RESULTS;
-  if (!Number.isInteger(numResults) || numResults < MIN_SEARCH_RESULTS || numResults > MAX_SEARCH_RESULTS) {
-    throw new RangeError(
-      `num_results must be an integer from ${MIN_SEARCH_RESULTS} to ${MAX_SEARCH_RESULTS}`,
-    );
-  }
-  const timeout = options.timeout ?? 600;
-  if (!Number.isFinite(timeout) || timeout <= 0) {
+  const value = text("query", query);
+  if ([...value].length > 1000)
+    throw new RangeError("query must be 1 to 1000 characters");
+  const timeout = options.timeout ?? 120;
+  if (!Number.isFinite(timeout) || timeout <= 0)
     throw new RangeError("timeout must be greater than 0 seconds");
-  }
-  const body: Record<string, unknown> = { action: "websearch", query: query.trim() };
-  if (country != null) body.country = country.trim();
-  body.numResults = numResults;
-  return request<T>("POST", API_URL, body, authHeaders(token), timeout, token);
+  return get<T>(
+    {
+      action: "websearch",
+      query: value,
+      country: country("country", options.country ?? "us"),
+      numResults: integer("numResults", options.numResults ?? 10, 10, 100),
+    },
+    options,
+    timeout,
+  );
 }

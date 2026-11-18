@@ -1,5 +1,27 @@
-export { MrScraperError, account, scraper_api, web_search } from "./api.js";
+export {
+  MrScraperError,
+  account,
+  scrapeHtml,
+  scrapeMarkdown,
+  getScreenshot,
+  scrapeBrand,
+  scrapeJson,
+  webSearch,
+} from "./api.js";
 export type {
-  AccountOptions, AccountSummary, ScraperApiOptions, ScraperApiData,
-  WebSearchOptions, WebSearchResult, WebSearchResponse, MrScraperResponse,
+  AccountOptions,
+  AccountSummary,
+  PageOptions,
+  LoadingOptions,
+  HtmlOptions,
+  MarkdownOptions,
+  ScreenshotOptions,
+  JsonOptions,
+  BrandOptions,
+  PageData,
+  WaitUntil,
+  WebSearchOptions,
+  WebSearchResult,
+  WebSearchResponse,
+  MrScraperResponse,
 } from "./api.js";
