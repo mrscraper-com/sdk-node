@@ -43,3 +43,12 @@ void status({ timeout: 30 });
 void webSearch("test", { timeout: 120 });
 // @ts-expect-error use the CLI's super name
 void scrapeHtml("https://example.com", { superMode: true });
+
+void scrapeHtml("https://example.com", { warmStart: true });
+void scrapeMarkdown("https://example.com", { warmStart: false });
+// @ts-expect-error warmStart is strictly boolean
+void scrapeHtml("https://example.com", { warmStart: "true" });
+// @ts-expect-error warmStart is only an HTML/Markdown control
+void getScreenshot("https://example.com", { warmStart: true });
+// @ts-expect-error warmStart is only an HTML/Markdown control
+void scrapeJson("https://example.com", { warmStart: true });

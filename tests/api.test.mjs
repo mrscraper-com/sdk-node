@@ -123,6 +123,8 @@ for (const name of names)
         agent: "general",
         prompt: "Extract all data as complete as possible.",
       });
+    if (["scrapeHtml", "scrapeMarkdown"].includes(name))
+      expected.warmStart = "false";
     assert.deepEqual(p, expected);
   });
 test("forwards explicit controls and preserves false and zero", async () => {
@@ -193,3 +195,23 @@ test("long JSON prompts use POST with only extraction fields in body", async () 
     assert.ok(!req.url.searchParams.has(key));
   assert.equal(req.url.searchParams.get("maxRetries"), "0");
 });
+
+for (const name of ["scrapeHtml", "scrapeMarkdown"])
+  test(`warmStart forwarding: ${name}`, async () => {
+    calls = [];
+    for (const warmStart of [false, true]) {
+      await sdk[name](URL_TARGET, { warmStart });
+      assert.equal(
+        calls.at(-1).url.searchParams.get("warmStart"),
+        String(warmStart),
+      );
+    }
+    const sent = calls.length;
+    for (const warmStart of ["true", 1]) {
+      await assert.rejects(
+        sdk[name](URL_TARGET, { warmStart }),
+        /warmStart must be a boolean/,
+      );
+    }
+    assert.equal(calls.length, sent);
+  });
