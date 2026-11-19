@@ -1,4 +1,5 @@
 node_modules/
 dist/
 .env
-file.js
+
+manual-results/

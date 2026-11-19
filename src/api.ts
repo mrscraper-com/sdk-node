@@ -15,49 +15,111 @@ export interface MrScraperResponse<T = unknown> {
   headers: Record<string, string>;
 }
 
-export interface ScraperApiOptions {
-  /** Overrides MRSCRAPER_API_TOKEN for this call. */
+export interface StatusOptions {
+  /** API key used to authenticate the request. */
   token?: string;
-  html?: boolean;
-  markdown?: boolean;
-  /** Page timeout in seconds, from 1 to 300. */
+}
+
+export type WaitUntil =
+  "domcontentloaded" | "load" | "networkidle0" | "networkidle2";
+export interface PageOptions {
+  /** API key used to authenticate the request. */
+  token?: string;
+  /** Page load timeout in seconds, from 1 to 300. The HTTP request allows 30 additional seconds. */
   timeout?: number;
-  geo_code?: string;
-  proxy_country?: string | null;
-  block_resources?: boolean | null;
-  browser_rendering?: boolean | null;
+  /** Two-letter country code to load the page from, sent in lowercase. */
+  geoCode?: string;
+  /** Two-letter country code of the proxy server, sent in lowercase. */
+  proxyCountry?: string;
+  /** Whether to route the request through real devices. */
   super?: boolean;
-  use_proxy?: boolean;
-  proxy?: string | null;
-  wait_for_selector?: string | null;
-  home_page?: boolean;
+  /** Navigation completion event to wait for: domcontentloaded, load, networkidle0, or networkidle2. */
+  waitUntil?: WaitUntil;
+  /** Custom proxy URL used to load the page. */
+  proxy?: string;
+  /** Maximum number of retries, as a nonnegative integer. Omit this parameter for no limit. */
+  maxRetries?: number;
+  /** Whether to save the result to the dashboard Result tab. */
+  saveResult?: boolean;
+}
+export interface LoadingOptions {
+  /** Whether to block images, fonts, and stylesheets while loading the page. */
+  blockResources?: boolean;
+  /** Wait for the page to contain the specified CSS selector before returning the result. */
+  waitForSelector?: string;
+  /** Whether to include browser session cookies in the response. */
+  returnCookie?: boolean;
+}
+export interface HtmlOptions extends PageOptions, LoadingOptions {
+  /** Whether to enable warm start for more reliable scraping, at the cost of additional latency. */
+  warmStart?: boolean;
+  /** Whether to render the page in a browser before returning the result. */
+  browserRendering?: boolean;
+}
+export interface MarkdownOptions extends HtmlOptions {
+  /** Whether to include the page HTML in the response. */
+  html?: boolean;
+}
+export interface ScreenshotOptions extends PageOptions, LoadingOptions {
+  /** Screenshot area to capture: full for the entire page or top for the top viewport. */
+  screenshot?: "full" | "top";
+  /** Whether to include the page HTML in the response. */
+  html?: boolean;
+  /** Whether to include the page Markdown in the response. */
+  markdown?: boolean;
+}
+export interface JsonOptions extends PageOptions {
+  /** Instructions describing the data to extract. Append Json Schema: and a JSON schema to shape the output. */
+  prompt?: string;
+  /** Whether to render the page in a browser before returning the result. */
+  browserRendering?: boolean;
+  /** Whether to include the page HTML in the response. */
+  html?: boolean;
+  /** Whether to include a base64 screenshot in the response. */
   screenshot?: boolean;
-  bypass_proxy?: boolean;
-  cookie_jar?: string | null;
-  /** Headers forwarded to the target site, not the API request. */
-  headers?: Record<string, string> | string | null;
-  max_retries?: number;
-  token_cap?: number | null;
-  stream?: boolean | null;
-  discard_token_secret?: string;
 }
-
-export interface WebSearchOptions {
-  /** Overrides MRSCRAPER_API_TOKEN for this call. */
+export interface BrandOptions {
+  /** API key used to authenticate the request. */
   token?: string;
-  /** Compatibility flag: true requests HTML even when format is "json". */
-  raw?: boolean;
-  region?: string | null;
-  language?: string | null;
-  page?: number | null;
-  format?: "json" | "html";
-  render_js?: boolean;
-  /** HTTP request timeout in seconds. */
-  timeout?: number;
 }
+export interface WebSearchOptions {
+  /** API key used to authenticate the request. */
+  token?: string;
+  /** Two-letter country code to search from, sent in lowercase. */
+  country?: string;
+  /** Number of search results to request, as an integer from 10 to 100. Fewer results may be returned. */
+  numResults?: number;
+}
+export interface WebSearchResult {
+  rank: number;
+  title: string;
+  url: string;
+  description: string;
+  source: string;
+}
+export interface WebSearchResponse {
+  success: boolean;
+  message: string;
+  data: WebSearchResult[];
+}
+export type PageData =
+  | string
+  | {
+      html?: string;
+      markdown?: string;
+      screenshot?: string;
+      [key: string]: unknown;
+    };
+export const DEFAULT_JSON_PROMPT = "Extract all data as complete as possible.";
+// The helpers below are exported for the SDK's internal modules only; the
+// package entry point (index.ts) does not re-export them.
 
-function requireToken(explicitToken?: string): string {
-  const token = explicitToken || process.env.MRSCRAPER_API_TOKEN || "";
+export function requireToken(explicitToken?: string): string {
+  const token =
+    explicitToken ||
+    process.env.MRSCRAPER_API_TOKEN ||
+    process.env.MRSCRAPER_API_KEY ||
+    "";
   if (!token.trim()) {
     throw new MrScraperError(
       "API token is not set. Pass token in the options or set MRSCRAPER_API_TOKEN. Get your token at https://app.mrscraper.com.",
@@ -66,7 +128,7 @@ function requireToken(explicitToken?: string): string {
   return token;
 }
 
-function authHeaders(token: string): Record<string, string> {
+export function authHeaders(token: string): Record<string, string> {
   return {
     "Content-Type": "application/json",
     accept: "application/json",
@@ -75,15 +137,10 @@ function authHeaders(token: string): Record<string, string> {
   };
 }
 
-function setIfPresent(params: URLSearchParams, key: string, value: unknown): void {
-  if (value !== null && value !== undefined) {
-    params.set(key, typeof value === "boolean" ? String(value) : String(value));
-  }
-}
-
-async function post<T>(
+export async function request<T>(
+  method: "GET" | "POST",
   url: string,
-  body: Record<string, unknown>,
+  body: Record<string, unknown> | undefined,
   headers: Record<string, string>,
   timeoutSeconds: number,
   token: string,
@@ -92,9 +149,9 @@ async function post<T>(
   const timer = setTimeout(() => controller.abort(), timeoutSeconds * 1000);
   try {
     const response = await fetch(url, {
-      method: "POST",
+      method,
       headers,
-      body: JSON.stringify(body),
+      body: body === undefined ? undefined : JSON.stringify(body),
       signal: controller.signal,
     });
     if (response.status === 401) {
@@ -103,14 +160,37 @@ async function post<T>(
         401,
       );
     }
-    const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
-    const data = contentType.includes("application/json")
-      ? await response.json()
-      : await response.text();
     if (!response.ok) {
-      const message = typeof data === "string" ? data : JSON.stringify(data);
-      throw new MrScraperError(message.replaceAll(token, "[REDACTED]"), response.status);
+      let message = `HTTP ${response.status}`;
+      try {
+        const body = await response.text();
+        if (body) message = body;
+      } catch {
+        // The HTTP status remains useful even when an error body cannot be read.
+      }
+      throw new MrScraperError(
+        message.replaceAll(token, "[REDACTED]"),
+        response.status,
+      );
     }
+    const contentType = (response.headers.get("content-type") ?? "")
+      .split(";", 1)[0]
+      .trim()
+      .toLowerCase();
+    const isText =
+      !contentType ||
+      contentType.startsWith("text/") ||
+      [
+        "application/xml",
+        "application/xhtml+xml",
+        "application/javascript",
+      ].includes(contentType);
+    const data =
+      contentType === "application/json" || contentType.endsWith("+json")
+        ? await response.json()
+        : isText
+          ? await response.text()
+          : Buffer.from(await response.arrayBuffer());
     return {
       status_code: response.status,
       data: data as T,
@@ -125,125 +205,285 @@ async function post<T>(
   }
 }
 
-/** Fetch a page through the MrScraper API. Options mirror the Python client's page-fetch options. */
-export async function scraper_api<T = unknown>(
-  url: string,
-  options: ScraperApiOptions = {},
+/** Return the raw account status API response without summarizing, redacting body fields, or adding calculated fields.
+ * @param options Service options and authentication.
+ */
+export async function status<T = unknown>(
+  options: StatusOptions = {},
 ): Promise<MrScraperResponse<T>> {
   const token = requireToken(options.token);
-  const timeout = options.timeout ?? 120;
-  const maxRetries = options.max_retries ?? 3;
-  if (!Number.isFinite(timeout) || timeout < 1 || timeout > 300) {
-    throw new RangeError("timeout must be between 1 and 300 seconds");
-  }
-  if (!Number.isInteger(maxRetries) || maxRetries < 0) {
-    throw new RangeError("max_retries must be greater than or equal to 0");
-  }
-  if (options.token_cap != null && (!Number.isInteger(options.token_cap) || options.token_cap < 0)) {
-    throw new RangeError("token_cap must be greater than or equal to 0");
-  }
-  if (options.screenshot !== undefined && typeof options.screenshot !== "boolean") {
-    throw new TypeError("screenshot must be a boolean");
-  }
-  if (options.super !== undefined && typeof options.super !== "boolean") {
-    throw new TypeError("super must be a boolean");
-  }
-
-  const params = new URLSearchParams();
-  setIfPresent(params, "token", token);
-  setIfPresent(params, "timeout", timeout);
-  setIfPresent(params, "geoCode", options.geo_code ?? "US");
-  setIfPresent(params, "proxyCountry", options.proxy_country);
-  setIfPresent(params, "browserRendering", options.screenshot ? true : options.browser_rendering);
-  setIfPresent(params, "super", options.super ? true : null);
-  setIfPresent(params, "useProxy", options.use_proxy === false ? false : null);
-  setIfPresent(params, "proxy", options.proxy);
-  setIfPresent(params, "html", options.html ?? true);
-  setIfPresent(params, "markdown", options.markdown ?? false);
-  setIfPresent(params, "waitForSelector", options.wait_for_selector);
-  setIfPresent(params, "warmStart", options.home_page ? true : null);
-  setIfPresent(params, "screenshot", options.screenshot ? true : null);
-  setIfPresent(params, "blockResources", options.block_resources ? true : null);
-  setIfPresent(params, "bypassProxy", options.bypass_proxy ? true : null);
-  setIfPresent(params, "cookieJar", options.cookie_jar);
-  setIfPresent(
-    params,
-    "headers",
-    typeof options.headers === "object" && options.headers !== null
-      ? JSON.stringify(options.headers)
-      : options.headers,
+  const response = await request<T>(
+    "GET",
+    `${(process.env.MRSCRAPER_API_BASE_URL || "https://api.app.mrscraper.com/api/v1").replace(/\/+$/, "")}/subscription-accounts`,
+    undefined,
+    authHeaders(token),
+    600,
+    token,
   );
-  setIfPresent(params, "stream", options.stream);
-
-  const headers = authHeaders(token);
-  if (options.discard_token_secret) {
-    headers["x-discard-token-secret"] = options.discard_token_secret;
-  }
-  const body: Record<string, unknown> = { url, maxRetries };
-  if (options.token_cap != null) body.tokenCap = options.token_cap;
-
-  return post<T>(`https://api.mrscraper.com/?${params}`, body, headers, timeout + 30, token);
-}
-
-function normalizeSerpInput(input: string): {
-  query: string;
-  region: string | null;
-  language: string | null;
-  page: number | null;
-} {
-  const value = input.trim();
-  if (!value) throw new TypeError("A Google search query or URL is required");
-  if (!/^https?:\/\//i.test(value)) {
-    return { query: value, region: null, language: null, page: null };
-  }
-  const parsed = new URL(value);
-  const query = (parsed.searchParams.get("q") ?? "").trim();
-  if (!query) throw new TypeError("Google search URL must contain a q parameter");
-  const startValue = (parsed.searchParams.get("start") ?? "0").trim();
-  const start = /^[+-]?\d+$/.test(startValue) ? Number(startValue) : 0;
   return {
-    query,
-    region: parsed.searchParams.get("gl"),
-    language: parsed.searchParams.get("hl"),
-    page: start > 0 ? Math.floor(start / 10) + 1 : null,
+    ...response,
+    headers: Object.fromEntries(
+      Object.entries(response.headers).filter(
+        ([key]) =>
+          ![
+            "authorization",
+            "proxy-authorization",
+            "set-cookie",
+            "set-cookie2",
+            "x-api-token",
+          ].includes(key.toLowerCase()),
+      ),
+    ),
   };
 }
 
-/** Fetch Google search results. Accepts query text or a Google search URL. */
-export async function web_search<T = unknown>(
+function integer(
+  name: string,
+  value: number,
+  min: number,
+  max = Number.MAX_SAFE_INTEGER,
+): number {
+  if (!Number.isSafeInteger(value) || value < min || value > max)
+    throw new RangeError(`${name} must be an integer from ${min} to ${max}`);
+  return value;
+}
+function text(name: string, value: string): string {
+  if (typeof value !== "string" || !value.trim())
+    throw new TypeError(`${name} must be a non-empty string`);
+  return value.trim();
+}
+function pageUrl(value: string): string {
+  let parsed: URL | undefined;
+  try {
+    parsed = new URL(value);
+  } catch {
+    /* Consistent error below. */
+  }
+  if (!parsed || !["http:", "https:"].includes(parsed.protocol))
+    throw new TypeError("url must be an absolute HTTP or HTTPS URL");
+  return value;
+}
+function country(name: string, value: string): string {
+  if (typeof value !== "string" || !/^[a-z]{2}$/i.test(value))
+    throw new TypeError(`${name} must be a two-letter country code`);
+  return value.toLowerCase();
+}
+function boolean(name: string, value: boolean): boolean {
+  if (typeof value !== "boolean")
+    throw new TypeError(`${name} must be a boolean`);
+  return value;
+}
+function pageParams(
   url: string,
-  options: WebSearchOptions = {},
+  options: PageOptions,
+): Record<string, string | number | boolean> {
+  const {
+    timeout = 300,
+    geoCode = "us",
+    proxyCountry = "us",
+    super: superRouting = false,
+    waitUntil = "domcontentloaded",
+    proxy,
+    maxRetries,
+    saveResult = false,
+  } = options;
+  if (
+    !["domcontentloaded", "load", "networkidle0", "networkidle2"].includes(
+      waitUntil,
+    )
+  )
+    throw new TypeError("Invalid waitUntil event");
+  const params: Record<string, string | number | boolean> = {
+    url: pageUrl(url),
+    timeout: integer("timeout", timeout, 1, 300),
+    geoCode: country("geoCode", geoCode),
+    proxyCountry: country("proxyCountry", proxyCountry),
+    super: boolean("super", superRouting),
+    waitUntil,
+    saveResult: boolean("saveResult", saveResult),
+  };
+  if (proxy !== undefined) params.proxy = text("proxy", proxy);
+  if (maxRetries !== undefined)
+    params.maxRetries = integer("maxRetries", maxRetries, 0);
+  return params;
+}
+function loadingParams(
+  options: LoadingOptions,
+): Record<string, string | number | boolean> {
+  const params: Record<string, string | number | boolean> = {
+    blockResources: boolean("blockResources", options.blockResources ?? false),
+    returnCookie: boolean("returnCookie", options.returnCookie ?? false),
+  };
+  if (options.waitForSelector !== undefined)
+    params.waitForSelector = text("waitForSelector", options.waitForSelector);
+  return params;
+}
+function endpoint(params: Record<string, string | number | boolean>): string {
+  const result = new URL(
+    process.env.MRSCRAPER_FETCH_BASE_URL || "https://api.mrscraper.com",
+  );
+  for (const [key, value] of Object.entries(params))
+    result.searchParams.set(key, String(value));
+  return result.toString();
+}
+async function get<T>(
+  params: Record<string, string | number | boolean>,
+  options: BrandOptions,
+  timeout: number,
 ): Promise<MrScraperResponse<T>> {
   const token = requireToken(options.token);
-  const format = options.format ?? "json";
-  if (format !== "json" && format !== "html") {
-    throw new TypeError("format must be 'json' or 'html'");
-  }
-  if (options.page != null && (!Number.isInteger(options.page) || options.page < 1)) {
-    throw new RangeError("page must be a positive integer");
-  }
-  const timeout = options.timeout ?? 600;
-  if (!Number.isFinite(timeout) || timeout <= 0) {
-    throw new RangeError("timeout must be greater than 0 seconds");
-  }
-  const normalized = normalizeSerpInput(url);
-  const body: Record<string, unknown> = {
-    query: normalized.query,
-    format: (options.raw ?? true) ? "html" : format,
-    renderJs: Boolean(options.render_js ?? false),
-  };
-  const region = options.region || normalized.region;
-  const language = options.language || normalized.language;
-  const page = options.page || normalized.page;
-  if (region != null) body.region = region;
-  if (language != null) body.language = language;
-  if (page != null) body.page = page;
-
-  return post<T>(
-    "https://sync.scraper.mrscraper.com/api/google/serp/v2/sync",
-    body,
+  return request<T>(
+    "GET",
+    endpoint(params),
+    undefined,
     authHeaders(token),
     timeout,
     token,
+  );
+}
+/** Retrieve the raw HTML of a page. Browser rendering is optional.
+ * @param url Absolute HTTP or HTTPS URL of the page to process.
+ * @param options Service options and authentication.
+ */
+export async function scrapeHtml<T = PageData>(
+  url: string,
+  options: HtmlOptions = {},
+): Promise<MrScraperResponse<T>> {
+  const params: Record<string, string | number | boolean> = {
+    ...pageParams(url, options),
+    ...loadingParams(options),
+    browserRendering: boolean(
+      "browserRendering",
+      options.browserRendering ?? false,
+    ),
+    warmStart: boolean("warmStart", options.warmStart ?? false),
+    html: true,
+    markdown: false,
+    screenshot: false,
+  };
+  return get<T>(params, options, Number(params.timeout) + 30);
+}
+/** Retrieve a page as Markdown. Including HTML also enables browser rendering and returns both outputs as JSON.
+ * @param url Absolute HTTP or HTTPS URL of the page to process.
+ * @param options Service options and authentication.
+ */
+export async function scrapeMarkdown<T = PageData>(
+  url: string,
+  options: MarkdownOptions = {},
+): Promise<MrScraperResponse<T>> {
+  const html = boolean("html", options.html ?? false);
+  const browserRendering = boolean(
+    "browserRendering",
+    options.browserRendering ?? false,
+  );
+  const params: Record<string, string | number | boolean> = {
+    ...pageParams(url, options),
+    ...loadingParams(options),
+    browserRendering: html || browserRendering,
+    warmStart: boolean("warmStart", options.warmStart ?? false),
+    html,
+    markdown: true,
+    screenshot: false,
+  };
+  return get<T>(params, options, Number(params.timeout) + 30);
+}
+/** Capture a base64 screenshot of the full page or top viewport. Browser rendering is always enabled.
+ * @param url Absolute HTTP or HTTPS URL of the page to process.
+ * @param options Service options and authentication.
+ */
+export async function getScreenshot<T = PageData>(
+  url: string,
+  options: ScreenshotOptions = {},
+): Promise<MrScraperResponse<T>> {
+  const screenshot = options.screenshot ?? "full";
+  if (!["full", "top"].includes(screenshot))
+    throw new TypeError("screenshot must be full or top");
+  const params: Record<string, string | number | boolean> = {
+    ...pageParams(url, options),
+    ...loadingParams(options),
+    browserRendering: true,
+    screenshot,
+    html: boolean("html", options.html ?? true),
+    markdown: boolean("markdown", options.markdown ?? false),
+  };
+  return get<T>(params, options, Number(params.timeout) + 30);
+}
+/** Extract structured JSON from a page using a natural-language prompt. Append Json Schema: and a JSON schema to shape the output.
+ * @param url Absolute HTTP or HTTPS URL of the page to process.
+ * @param options Service options and authentication.
+ */
+export async function scrapeJson<T = unknown>(
+  url: string,
+  options: JsonOptions = {},
+): Promise<MrScraperResponse<T>> {
+  const prompt = options.prompt ?? DEFAULT_JSON_PROMPT;
+  text("prompt", prompt);
+  const params: Record<string, string | number | boolean> = {
+    ...pageParams(url, options),
+    browserRendering: boolean(
+      "browserRendering",
+      options.browserRendering ?? false,
+    ),
+    html: boolean("html", options.html ?? false),
+    screenshot: boolean("screenshot", options.screenshot ?? false),
+    agent: "general",
+    prompt,
+  };
+  const token = requireToken(options.token);
+  const timeout = Number(params.timeout) + 30;
+  const getUrl = endpoint(params);
+  if (getUrl.length <= 8000)
+    return request<T>(
+      "GET",
+      getUrl,
+      undefined,
+      authHeaders(token),
+      timeout,
+      token,
+    );
+  const { url: target, prompt: instruction, agent, ...query } = params;
+  return request<T>(
+    "POST",
+    endpoint(query),
+    { url: target, prompt: instruction, agent },
+    authHeaders(token),
+    timeout,
+    token,
+  );
+}
+/** Extract a website's colors, typography, logos, and social links as JSON.
+ * @param url Absolute HTTP or HTTPS URL of the page to process.
+ * @param options Service options and authentication.
+ */
+export async function scrapeBrand<T = unknown>(
+  url: string,
+  options: BrandOptions = {},
+): Promise<MrScraperResponse<T>> {
+  return get<T>(
+    { action: "brand-scraping", url: pageUrl(url), bundle: "none" },
+    options,
+    120,
+  );
+}
+/** Search the web and return ranked results with titles, URLs, descriptions, and sources.
+ * @param query Search query text, trimmed before sending, containing 1 to 1000 characters.
+ * @param options Service options and authentication.
+ */
+export async function webSearch<T = WebSearchResponse>(
+  query: string,
+  options: WebSearchOptions = {},
+): Promise<MrScraperResponse<T>> {
+  const value = text("query", query);
+  if ([...value].length > 1000)
+    throw new RangeError("query must be 1 to 1000 characters");
+  return get<T>(
+    {
+      action: "websearch",
+      query: value,
+      country: country("country", options.country ?? "us"),
+      numResults: integer("numResults", options.numResults ?? 10, 10, 100),
+    },
+    options,
+    120,
   );
 }
