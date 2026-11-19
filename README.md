@@ -1,140 +1,273 @@
-# MrScraper Node.js SDK
+# MrScraper Node SDK
 
-![](./mrscraper.jpeg)
+![MrScraper](./mrscraper.jpeg)
 
-Seven services matching the [MrScraper CLI](https://github.com/mrscraper-com/cli).
+Seven async services matching the [MrScraper CLI](https://github.com/mrscraper-com/cli), with camelCase functions and options for JavaScript and TypeScript.
 
-| Service           | Method           | Purpose                                       |
-| ----------------- | ---------------- | --------------------------------------------- |
-| `account`         | `account`        | Account, subscription, quota, and rate limits |
-| `scrape-html`     | `scrapeHtml`     | Raw page HTML                                 |
-| `scrape-markdown` | `scrapeMarkdown` | Clean Markdown; optional HTML                 |
-| `get-screenshot`  | `getScreenshot`  | Full-page or top-viewport base64 screenshot   |
-| `scrape-brand`    | `scrapeBrand`    | Brand data as JSON                            |
-| `scrape-json`     | `scrapeJson`     | Structured extraction using a prompt          |
-| `web-search`      | `webSearch`      | Ranked web search results                     |
+| CLI command       | SDK function                   | Purpose                                                   |
+| ----------------- | ------------------------------ | --------------------------------------------------------- |
+| `status`          | `status()`                     | Raw account, subscription, quota, and rate-limit response |
+| `scrape-html`     | `scrapeHtml(url, options)`     | Raw page HTML                                             |
+| `scrape-markdown` | `scrapeMarkdown(url, options)` | Markdown, optionally with HTML                            |
+| `get-screenshot`  | `getScreenshot(url, options)`  | Full-page or top-viewport screenshot                      |
+| `scrape-brand`    | `scrapeBrand(url, options)`    | Website brand data as JSON                                |
+| `scrape-json`     | `scrapeJson(url, options)`     | Structured data extracted with a prompt                   |
+| `web-search`      | `webSearch(query, options)`    | Ranked web search results                                 |
 
-## Install and use
+## Installation and authentication
 
-Requires Node.js 18+. Obtain a token from [the app](https://app.mrscraper.com).
+Requires Node.js 18 or newer. Obtain an API token from [the MrScraper app](https://app.mrscraper.com).
 
 ```bash
 npm install @mrscraper/sdk
 export MRSCRAPER_API_TOKEN="YOUR_TOKEN"
 ```
 
-```js
-import {
-  account,
-  scrapeHtml,
-  scrapeMarkdown,
-  getScreenshot,
-  scrapeBrand,
-  scrapeJson,
-  webSearch,
-} from "@mrscraper/sdk";
+Each function accepts an optional `token: string` in its options. Credential precedence is an explicit nonempty token, `MRSCRAPER_API_TOKEN`, then `MRSCRAPER_API_KEY`. Credentials are sent in authentication headers.
 
-console.log((await account()).data);
-const html = await scrapeHtml("https://books.toscrape.com/");
-const markdown = await scrapeMarkdown("https://books.toscrape.com/", {
+## Quickstart
+
+Save this as `example.mjs` and run `node example.mjs`:
+
+```js
+import { scrapeHtml } from "@mrscraper/sdk";
+
+const result = await scrapeHtml("https://example.com", {
+  browserRendering: true,
+  timeout: 120,
+});
+console.log(result.status_code);
+console.log(result.data);
+```
+
+All functions return promises. Every example uses `example.com` as the target; replace it for your use case. Calls use your account quota.
+
+## Shared page parameters
+
+These options apply to HTML, Markdown, screenshots, and JSON extraction. The page URL is a required `string` and must be an absolute HTTP or HTTPS URL.
+
+| CLI option        | SDK option     | Type               | Default              | Meaning                                                                    |
+| ----------------- | -------------- | ------------------ | -------------------- | -------------------------------------------------------------------------- |
+| `--timeout`       | `timeout`      | `number` (integer) | `300`                | Page deadline in seconds, 1–300. HTTP transport allows another 30 seconds. |
+| `--geo-code`      | `geoCode`      | `string`           | `"us"`               | Country to load the page from; two ASCII letters, sent in lowercase.       |
+| `--proxy-country` | `proxyCountry` | `string`           | `"us"`               | Proxy server country; two ASCII letters, sent in lowercase.                |
+| `--super`         | `super`        | `boolean`          | `false`              | Use real-device routing.                                                   |
+| `--wait-until`    | `waitUntil`    | `WaitUntil`        | `"domcontentloaded"` | Also accepts `"load"`, `"networkidle0"`, or `"networkidle2"`.              |
+| `--proxy`         | `proxy`        | `string`           | omitted              | Custom proxy URL.                                                          |
+| `--max-retries`   | `maxRetries`   | `number` (integer) | omitted              | Nonnegative retry limit; omission means no limit. Zero is preserved.       |
+| `--save-result`   | `saveResult`   | `boolean`          | `false`              | Save the result in the dashboard.                                          |
+
+HTML, Markdown, and screenshots additionally accept these loading controls. JSON extraction does not accept them.
+
+| CLI option            | SDK option        | Type      | Default | Meaning                                          |
+| --------------------- | ----------------- | --------- | ------- | ------------------------------------------------ |
+| `--block-resources`   | `blockResources`  | `boolean` | `false` | Block images, fonts, and stylesheets.            |
+| `--wait-for-selector` | `waitForSelector` | `string`  | omitted | Wait for a CSS selector.                         |
+| `--return-cookie`     | `returnCookie`    | `boolean` | `false` | Include browser session cookies in the response. |
+
+Omit optional values or use `undefined` to keep them off the request. Explicit `false` and `0` values are preserved. Use camelCase option names, such as `browserRendering` and `numResults`.
+
+## Service examples
+
+### Status
+
+```js
+import { status } from "@mrscraper/sdk";
+
+const result = await status();
+console.log(result.data);
+```
+
+`status` takes no service parameters; its options only accept authentication (`token`). It uses the CLI's fixed 600-second HTTP deadline. The complete response body is returned in `data` without unwrapping, redaction, summary fields, or calculated values. When the API wraps account details in `data`, those details are in `result.data.data`. Sensitive response headers are removed.
+
+### Scrape HTML
+
+```js
+import { scrapeHtml } from "@mrscraper/sdk";
+
+const result = await scrapeHtml("https://example.com", {
+  browserRendering: true,
+  waitForSelector: ".content",
+  waitUntil: "networkidle2",
+  timeout: 120,
+  geoCode: "us",
+  proxyCountry: "us",
+  super: false,
+  maxRetries: 0,
+  saveResult: false,
+  blockResources: false,
+  returnCookie: false,
+});
+console.log(result.data);
+```
+
+`browserRendering` is a `boolean`, default `false`. This service always sends `html=true`, `markdown=false`, and `screenshot=false`. HTML is returned as text unless the selected controls cause the API to return JSON.
+
+### Scrape Markdown
+
+```js
+import { scrapeMarkdown } from "@mrscraper/sdk";
+
+const result = await scrapeMarkdown("https://example.com", {
   html: true,
+  browserRendering: false,
 });
-const screenshot = await getScreenshot("https://example.com", {
+console.log(result.data);
+```
+
+`html` and `browserRendering` are booleans, both default `false`. Enabling HTML also enables browser rendering and returns JSON containing both outputs. Without HTML, the default response is Markdown text. This service always sends `markdown=true` and `screenshot=false`.
+
+### Get screenshot
+
+```js
+import { getScreenshot } from "@mrscraper/sdk";
+import { writeFile } from "node:fs/promises";
+
+const result = await getScreenshot("https://example.com", {
   screenshot: "top",
+  html: false,
+  markdown: true,
 });
-const brand = await scrapeBrand("https://mrscraper.com");
-const data = await scrapeJson("https://books.toscrape.com/", {
-  prompt: "Extract titles and prices",
+if (typeof result.data === "object" && result.data?.screenshot) {
+  await writeFile("page.png", Buffer.from(result.data.screenshot, "base64"));
+}
+console.log(result.data);
+```
+
+| Option       | Type              | Default  | Meaning                                     |
+| ------------ | ----------------- | -------- | ------------------------------------------- |
+| `screenshot` | `"full" \| "top"` | `"full"` | Capture the whole page or the top viewport. |
+| `html`       | `boolean`         | `true`   | Include HTML.                               |
+| `markdown`   | `boolean`         | `false`  | Include Markdown.                           |
+
+Browser rendering is always enabled; there is no `browserRendering` option for screenshots. The API's screenshot JSON retains the base64 image and other returned fields. The API can still include HTML when `html: false` is requested.
+
+### Scrape brand
+
+```js
+import { scrapeBrand } from "@mrscraper/sdk";
+
+const result = await scrapeBrand("https://example.com");
+console.log(result.data);
+```
+
+Only the required page URL and optional authentication are accepted. The SDK sends `action=brand-scraping&bundle=none` and uses a fixed 120-second HTTP deadline. Inspect the returned API structure; brand data is typically in `result.data.data.brand`.
+
+### Scrape JSON
+
+```js
+import { scrapeJson } from "@mrscraper/sdk";
+
+const result = await scrapeJson("https://example.com", {
+  prompt:
+    'Extract the page title. Json Schema: {"type":"object","properties":{"title":{"type":"string"}}}',
+  browserRendering: true,
+  html: false,
+  screenshot: false,
+  timeout: 180,
 });
-const results = await webSearch("web scraping", {
+console.log(result.data);
+```
+
+| Option             | Type      | Default                                       | Meaning                                                                                  |
+| ------------------ | --------- | --------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `prompt`           | `string`  | `"Extract all data as complete as possible."` | Nonempty extraction instruction; append `Json Schema:` and a schema to shape the output. |
+| `browserRendering` | `boolean` | `false`                                       | Enable browser rendering.                                                                |
+| `html`             | `boolean` | `false`                                       | Include page HTML.                                                                       |
+| `screenshot`       | `boolean` | `false`                                       | Include a base64 screenshot.                                                             |
+
+JSON extraction uses the `general` agent. It sends GET until the encoded URL exceeds 8,000 characters, then POST with `url`, `prompt`, and `agent` in the body and page controls in the query. Loading and cookie controls are unavailable.
+
+### Web search
+
+```js
+import { webSearch } from "@mrscraper/sdk";
+
+const result = await webSearch("site:example.com documentation", {
   country: "id",
   numResults: 20,
 });
-console.log(results.data);
+console.log(result.data);
 ```
 
-Functions accept `{ token: "YOUR_TOKEN" }` in their options, or read `MRSCRAPER_API_TOKEN` / `MRSCRAPER_API_KEY`. Names and options use JavaScript camelCase. TypeScript option and response types are exported.
+| Argument or option | Type               | Default  | Meaning                                                        |
+| ------------------ | ------------------ | -------- | -------------------------------------------------------------- |
+| `query`            | `string`           | required | Query text, trimmed, 1–1,000 characters.                       |
+| `country`          | `string`           | `"us"`   | Two-letter country code, sent in lowercase.                    |
+| `numResults`       | `number` (integer) | `10`     | Requested result count, 10–100. Fewer results may be returned. |
 
-Every response has `status_code`, `data`, and `headers`. JSON is parsed, text remains a string, and binary responses remain `Buffer`. Screenshot JSON retains the upstream base64 `screenshot`. Account returns a safe summary with `subscription_status`, `enterprise`, `token_usage`, `token_limit`, `token_remaining`, `usage_percent`, `rate_limit`, `rate_ttl`, `auto_renew`, `ends_at`, and `user` (`name`, `email`, `verified`), excluding credentials and billing identifiers. Account accepts a positive `timeout` (default 30 seconds).
+Search uses a fixed 120-second HTTP deadline and has no `timeout` option. Results preserve the upstream `success`, `message`, and `data` fields. Entries include rank, title, URL, description, and source.
 
-Failures throw `MrScraperError` with an optional HTTP `status`; credentials are redacted from error messages. `MRSCRAPER_FETCH_BASE_URL` and `MRSCRAPER_API_BASE_URL` can override the API hosts for local testing.
+## Response types and errors
 
-## Options
+Every successful response has this shape:
 
-| Python / LangChain  | Node / MCP         | Default              | Meaning                                             |
-| ------------------- | ------------------ | -------------------- | --------------------------------------------------- |
-| `timeout`           | `timeout`          | `300`                | Page deadline in seconds, integer 1–300             |
-| `geo_code`          | `geoCode`          | `"us"`               | Country to load the page from                       |
-| `proxy_country`     | `proxyCountry`     | `"us"`               | Proxy server country                                |
-| `super`             | `superMode`        | `False` / `false`    | Use real-device routing; sent as `super`            |
-| `wait_until`        | `waitUntil`        | `"domcontentloaded"` | Also accepts `load`, `networkidle0`, `networkidle2` |
-| `proxy`             | `proxy`            | omitted              | Custom proxy URL                                    |
-| `max_retries`       | `maxRetries`       | omitted              | Nonnegative retry limit; omission means no limit    |
-| `save_result`       | `saveResult`       | `False` / `false`    | Save the result in the dashboard                    |
-| `block_resources`   | `blockResources`   | `False` / `false`    | Block images, fonts, and stylesheets                |
-| `wait_for_selector` | `waitForSelector`  | omitted              | Wait for a CSS selector                             |
-| `return_cookie`     | `returnCookie`     | `False` / `false`    | Include session cookies                             |
-| `browser_rendering` | `browserRendering` | `False` / `false`    | Enable browser rendering                            |
+```ts
+interface MrScraperResponse<T = unknown> {
+  status_code: number;
+  data: T;
+  headers: Record<string, string>;
+}
+```
 
-The first eight page controls apply to HTML, Markdown, screenshots, and JSON. The three loading controls (`block_resources`/`blockResources`, `wait_for_selector`/`waitForSelector`, `return_cookie`/`returnCookie`) apply to HTML, Markdown, and screenshots. Browser rendering can be selected for HTML, Markdown, and JSON; screenshots always enable it.
+JSON bodies become JavaScript values, text remains a string, and binary responses remain `Buffer`. Output field names retain the API's spelling. All seven functions support a generic response body type when you know the API shape:
 
-Markdown accepts `html=False` / `html: false`; enabling HTML forces browser rendering. Screenshots accept `screenshot="full"` or `"top"`, `html=True` / `true`, and `markdown=False` / `false`. JSON accepts a `prompt` (default `"Extract all data as complete as possible."`), `html=False` / `false`, and `screenshot=False` / `false`. JSON does not expose loading or cookie controls. Brand takes only the target URL, plus authentication in the Node SDK.
+```ts
+import { scrapeJson } from "@mrscraper/sdk";
 
-Search takes `query`, `country="us"`, and `num_results=10` / `numResults: 10` (integer 10–100). Queries are trimmed and must contain 1–1,000 characters. Countries are two ASCII letters and are sent in lowercase. Search also accepts a positive local `timeout`, default 120 seconds. This timeout is not sent upstream as a page option.
+const result = await scrapeJson<{ data: { title: string } }>(
+  "https://example.com",
+  { prompt: "Extract the page title" },
+);
+console.log(result.data.data.title);
+```
 
-## HTTP contract
+```js
+import { scrapeHtml, MrScraperError } from "@mrscraper/sdk";
 
-The CLI repository is the source of truth for service behavior. These are seven services, using two API hosts:
+try {
+  await scrapeHtml("https://example.com");
+} catch (error) {
+  if (error instanceof MrScraperError) {
+    console.error(error.status, error.message);
+  } else {
+    throw error;
+  }
+}
+```
 
-| Service    | Request                                                                                              |
-| ---------- | ---------------------------------------------------------------------------------------------------- |
-| Account    | `GET https://api.app.mrscraper.com/api/v1/subscription-accounts`                                     |
-| HTML       | `GET https://api.mrscraper.com?url=…&html=true&markdown=false&screenshot=false`                      |
-| Markdown   | `GET https://api.mrscraper.com?url=…&html=false&markdown=true&screenshot=false`                      |
-| Screenshot | `GET https://api.mrscraper.com?url=…&browserRendering=true&screenshot=full&html=true&markdown=false` |
-| Brand      | `GET https://api.mrscraper.com?action=brand-scraping&url=…&bundle=none`                              |
-| JSON       | `GET https://api.mrscraper.com?url=…&agent=general&prompt=…&html=false&screenshot=false`             |
-| Web search | `GET https://api.mrscraper.com?action=websearch&query=…&country=us&numResults=10`                    |
-
-JSON uses GET until the encoded URL exceeds 8,000 characters. It then uses POST with `{ "url", "prompt", "agent": "general" }` in the JSON body and page controls in the query. Append `Json Schema:` and a JSON schema to the prompt to shape the extraction.
-
-Authentication uses headers. Credentials are never placed in the query string. Page requests allow 30 seconds beyond the page timeout for HTTP transport; brand and search default to 120 seconds. Brand returns JSON synchronously with `bundle=none`.
+Authentication, HTTP, network, and timeout failures throw `MrScraperError`; `status` is the HTTP status when available. Invalid parameters throw `TypeError` or `RangeError` before sending the request.
 
 ## Migration
 
-Version 6.0.0 replaces `scraper_api` and `web_search` with the seven camelCase services. Use `scrapeHtml(url)`, `scrapeMarkdown(url, { html: true })`, or `getScreenshot(url, { html: true, markdown: true })` for the old combined output calls. Rename snake_case options to camelCase (for example `geo_code` → `geoCode`, `max_retries` → `maxRetries`, `super` → `superMode`). The old `full_page` option becomes `screenshot: "full"` or `"top"`.
+Replace `account()` with `status()` and read the raw API response body. The status and search transport deadlines are fixed; remove their old `timeout` options. Rename `superMode` to `super`.
 
-Page defaults now match the CLI: 300-second timeout, US geolocation and proxy country, rendering off unless required by a chosen service, and no explicit retry limit. Search uses `query`, `country`, and a result count; old URL/locale/raw/format options are removed. Legacy scraper job, sitemap, rerun, result, and bundle-download methods are outside this seven-service API.
+The seven-service API replaces `scraper_api` with `scrapeHtml`, `scrapeMarkdown`, and `getScreenshot`. Use camelCase options such as `geoCode`, `maxRetries`, and `browserRendering`. Replace `full_page` with `screenshot: "full"` or `"top"`. Search uses `query`, `country`, and `numResults`. Legacy job, sitemap, rerun, result, and bundle-download methods are outside this interface.
 
-## Manual testing
-
-These commands make live calls and consume quota. Each service can be tested separately.
+## Development and manual checks
 
 ```bash
-npm install
+npm ci
+npm test
 npm run build
+```
+
+The automated suite uses local HTTP responses and checks defaults, serialized parameters, output types, and failures. The following manual calls use the live API and consume quota:
+
+```bash
 export MRSCRAPER_API_TOKEN="YOUR_TOKEN"
-node file.js all
-node file.js account
-node file.js scrapeHtml https://example.com
+npm run build
+node file.js status
+node file.js scrapeHtml https://example.com '{"browserRendering":true}'
 node file.js scrapeMarkdown https://example.com '{"html":true}'
 node file.js getScreenshot https://example.com '{"screenshot":"top"}'
-node file.js scrapeBrand https://mrscraper.com
-node file.js scrapeJson https://books.toscrape.com '{"prompt":"Extract titles and prices"}'
-node file.js webSearch "web scraping" '{"country":"id","numResults":20}'
+node file.js scrapeBrand https://example.com
+node file.js scrapeJson https://example.com '{"prompt":"Extract the page title"}'
+node file.js webSearch 'site:example.com documentation' '{"country":"id","numResults":20}'
 ```
 
-The runner saves responses and screenshots under `manual-results/`, continues after failures in all mode, prints a pass/fail summary, and exits nonzero on failure. `npm run test:manual -- <service> ...` builds before running the same script.
-
-## Development
-
-```bash
-npm test
-npm pack --dry-run
-```
-
-Version 6.0.0 includes the breaking camelCase naming migration.
+Manual responses are saved under `manual_results/`; failures exit nonzero.
 
 ## License
 
-MIT © MrScraper
+MIT. See [LICENSE](./LICENSE).

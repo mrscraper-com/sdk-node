@@ -1,5 +1,5 @@
 import {
-  account,
+  status,
   scrapeHtml,
   scrapeMarkdown,
   getScreenshot,
@@ -9,14 +9,13 @@ import {
 } from "../src/index.js";
 import type {
   MrScraperResponse,
-  AccountSummary,
   PageData,
   WebSearchResponse,
 } from "../src/index.js";
-const a: Promise<MrScraperResponse<AccountSummary>> = account();
+const a: Promise<MrScraperResponse<unknown>> = status();
 const h: Promise<MrScraperResponse<PageData>> = scrapeHtml(
   "https://example.com",
-  { superMode: true, maxRetries: 0, returnCookie: true },
+  { super: true, maxRetries: 0, returnCookie: true },
 );
 const w: Promise<MrScraperResponse<WebSearchResponse>> = webSearch("test", {
   country: "us",
@@ -37,3 +36,10 @@ void getScreenshot("https://example.com", { screenshot: true });
 void webSearch("test", { num_results: 10 });
 // @ts-expect-error brand accepts only authentication
 void scrapeBrand("https://example.com", { saveResult: true });
+
+// @ts-expect-error status has no service timeout option
+void status({ timeout: 30 });
+// @ts-expect-error search transport deadline is fixed
+void webSearch("test", { timeout: 120 });
+// @ts-expect-error use the CLI's super name
+void scrapeHtml("https://example.com", { superMode: true });

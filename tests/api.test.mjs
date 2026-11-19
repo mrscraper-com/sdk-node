@@ -39,7 +39,7 @@ after(async () => {
 });
 const URL_TARGET = "https://example.com/page?a=1&b=two";
 const names = [
-  "account",
+  "status",
   "scrapeHtml",
   "scrapeMarkdown",
   "getScreenshot",
@@ -56,7 +56,7 @@ for (const name of names)
   test(`wire contract: ${name}`, async () => {
     calls = [];
     const result = await sdk[name](
-      ...(name === "account"
+      ...(name === "status"
         ? []
         : [name === "webSearch" ? "  web scraping  " : URL_TARGET]),
     );
@@ -68,10 +68,17 @@ for (const name of names)
     assert.equal(req.headers["x-api-token"], "test-token");
     assert.ok(!("token" in p));
     assert.equal(result.status_code, 200);
-    if (name === "account") {
+    if (name === "status") {
       assert.equal(req.url.pathname, "/api/v1/subscription-accounts");
-      assert.equal(result.data.token_remaining, 80);
-      assert.ok(!JSON.stringify(result).includes("secret"));
+      assert.deepEqual(result.data, {
+        data: {
+          tokenLimit: 100,
+          tokenUsage: 20,
+          user: { name: "User" },
+          apiToken: "secret",
+        },
+      });
+      assert.ok(!("set-cookie" in result.headers));
       return;
     }
     if (name === "scrapeBrand") {
@@ -124,7 +131,7 @@ test("forwards explicit controls and preserves false and zero", async () => {
     timeout: 15,
     geoCode: "ID",
     proxyCountry: "SG",
-    superMode: true,
+    super: true,
     waitUntil: "networkidle2",
     proxy: "http://proxy.example",
     maxRetries: 0,

@@ -15,29 +15,9 @@ export interface MrScraperResponse<T = unknown> {
   headers: Record<string, string>;
 }
 
-export interface AccountOptions {
-  /** Overrides MRSCRAPER_API_TOKEN for this call. */
+export interface StatusOptions {
+  /** Overrides environment authentication for this call. */
   token?: string;
-  /** HTTP request timeout in seconds. Defaults to 30. */
-  timeout?: number;
-}
-
-export interface AccountSummary {
-  subscription_status: string | null;
-  enterprise: boolean;
-  token_usage: number;
-  token_limit: number;
-  token_remaining: number;
-  usage_percent: number;
-  rate_limit: number;
-  rate_ttl: number;
-  auto_renew: boolean;
-  ends_at: string | null;
-  user: {
-    name: string | null;
-    email: string | null;
-    verified: boolean;
-  };
 }
 
 export type WaitUntil =
@@ -47,7 +27,7 @@ export interface PageOptions {
   timeout?: number;
   geoCode?: string;
   proxyCountry?: string;
-  superMode?: boolean;
+  super?: boolean;
   waitUntil?: WaitUntil;
   proxy?: string;
   maxRetries?: number;
@@ -82,8 +62,6 @@ export interface WebSearchOptions {
   token?: string;
   country?: string;
   numResults?: number;
-  /** Local HTTP deadline in seconds. Defaults to 120. */
-  timeout?: number;
 }
 export interface WebSearchResult {
   rank: number;
@@ -200,68 +178,21 @@ export async function request<T>(
   }
 }
 
-/**
- * Return account identity, subscription, quota, and rate limits for the API
- * token. API tokens, billing identifiers, and sensitive headers are excluded.
- */
-export async function account(
-  options: AccountOptions = {},
-): Promise<MrScraperResponse<AccountSummary>> {
+/** Return the raw account API response without reshaping its body. */
+export async function status<T = unknown>(
+  options: StatusOptions = {},
+): Promise<MrScraperResponse<T>> {
   const token = requireToken(options.token);
-  const timeout = options.timeout ?? 30;
-  if (!Number.isFinite(timeout) || timeout <= 0) {
-    throw new RangeError("timeout must be greater than 0 seconds");
-  }
-  const response = await request<unknown>(
+  const response = await request<T>(
     "GET",
     `${(process.env.MRSCRAPER_API_BASE_URL || "https://api.app.mrscraper.com/api/v1").replace(/\/+$/, "")}/subscription-accounts`,
     undefined,
     authHeaders(token),
-    timeout,
+    600,
     token,
   );
-  const isRecord = (value: unknown): value is Record<string, unknown> =>
-    value !== null && typeof value === "object" && !Array.isArray(value);
-  const body = response.data;
-  const details = isRecord(body) && "data" in body ? body.data : body;
-  if (!isRecord(details)) {
-    throw new MrScraperError(
-      "Account response must contain an object",
-      response.status_code,
-    );
-  }
-  const numberOrZero = (value: unknown): number => {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  };
-  const stringOrNull = (value: unknown): string | null =>
-    typeof value === "string" ? value : null;
-  const tokenLimit = numberOrZero(details.tokenLimit);
-  const tokenUsage = numberOrZero(details.tokenUsage);
-  const user = isRecord(details.user) ? details.user : {};
   return {
     ...response,
-    // The raw account includes API tokens and billing identifiers.
-    data: {
-      subscription_status: stringOrNull(details.stripeStatus),
-      enterprise: Boolean(details.isEnterprise),
-      token_usage: tokenUsage,
-      token_limit: tokenLimit,
-      token_remaining: Math.max(0, tokenLimit - tokenUsage),
-      usage_percent:
-        tokenLimit > 0
-          ? Number(((tokenUsage / tokenLimit) * 100).toFixed(2))
-          : 0,
-      rate_limit: numberOrZero(details.rateLimit),
-      rate_ttl: numberOrZero(details.rateTtl),
-      auto_renew: Boolean(details.isAutoRenew),
-      ends_at: stringOrNull(details.endsAt),
-      user: {
-        name: stringOrNull(user.name),
-        email: stringOrNull(user.email),
-        verified: Boolean(user.isVerified),
-      },
-    },
     headers: Object.fromEntries(
       Object.entries(response.headers).filter(
         ([key]) =>
@@ -321,7 +252,7 @@ function pageParams(
     timeout = 300,
     geoCode = "us",
     proxyCountry = "us",
-    superMode = false,
+    super: superRouting = false,
     waitUntil = "domcontentloaded",
     proxy,
     maxRetries,
@@ -338,7 +269,7 @@ function pageParams(
     timeout: integer("timeout", timeout, 1, 300),
     geoCode: country("geoCode", geoCode),
     proxyCountry: country("proxyCountry", proxyCountry),
-    super: boolean("superMode", superMode),
+    super: boolean("super", superRouting),
     waitUntil,
     saveResult: boolean("saveResult", saveResult),
   };
@@ -496,9 +427,6 @@ export async function webSearch<T = WebSearchResponse>(
   const value = text("query", query);
   if ([...value].length > 1000)
     throw new RangeError("query must be 1 to 1000 characters");
-  const timeout = options.timeout ?? 120;
-  if (!Number.isFinite(timeout) || timeout <= 0)
-    throw new RangeError("timeout must be greater than 0 seconds");
   return get<T>(
     {
       action: "websearch",
@@ -507,6 +435,6 @@ export async function webSearch<T = WebSearchResponse>(
       numResults: integer("numResults", options.numResults ?? 10, 10, 100),
     },
     options,
-    timeout,
+    120,
   );
 }

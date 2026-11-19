@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { request } from "../dist/api.js";
 import { afterEach, test } from "node:test";
 import {
   scrapeHtml,
@@ -40,7 +41,6 @@ for (const [query, extra] of [
   ["ok", { numResults: 101 }],
   ["ok", { numResults: 10.5 }],
   ["ok", { country: "usa" }],
-  ["ok", { timeout: 0 }],
 ])
   test(`rejects search ${query.slice(0, 5)} ${JSON.stringify(extra)}`, async () => {
     let sent = false;
@@ -95,7 +95,7 @@ test("abort deadline becomes a safe SDK failure", async () => {
       ),
     );
   await assert.rejects(
-    webSearch("test", { ...options, timeout: 0.01 }),
+    request("GET", "https://example.com", undefined, {}, 0.01, options.token),
     (e) => e instanceof MrScraperError && !e.message.includes("test-token"),
   );
 });

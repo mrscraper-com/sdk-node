@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
-  account,
+  status,
   scrapeHtml,
   scrapeMarkdown,
   getScreenshot,
@@ -12,7 +12,7 @@ import {
 } from "./dist/index.js";
 
 const services = {
-  account,
+  status,
   scrapeHtml,
   scrapeMarkdown,
   getScreenshot,
@@ -23,15 +23,15 @@ const services = {
 
 const help = `Build: npm run build. Set MRSCRAPER_API_TOKEN or MRSCRAPER_API_KEY.
 Usage: node file.js [all] [url] [query]
-       node file.js account [options-json]
+       node file.js status [options-json]
        node file.js <service> [url-or-query] [options-json]
 Services: ${Object.keys(services).join(", ")}
 Examples:
   node file.js scrapeHtml https://example.com
   node file.js scrapeMarkdown https://example.com '{"html":true}'
   node file.js getScreenshot https://example.com '{"screenshot":"top"}'
-  node file.js scrapeBrand https://mrscraper.com
-  node file.js scrapeJson https://books.toscrape.com '{"prompt":"Extract titles and prices"}'
+  node file.js scrapeBrand https://example.com
+  node file.js scrapeJson https://example.com '{"prompt":"Extract titles and prices"}'
   node file.js webSearch "web scraping" '{"country":"id","numResults":20}'
 All mode attempts all seven services, continues after failures, and reports a summary.
 These are live calls and spend quota. Responses and screenshots are saved under manual-results/.`;
@@ -144,19 +144,17 @@ async function main() {
     );
   }
   const inputs = legacy ? [command, ...args] : args;
-  if (inputs.length > (command === "account" ? 1 : 2)) {
+  if (inputs.length > (command === "status" ? 1 : 2)) {
     throw new Error("Too many arguments. Run node file.js --help for usage.");
   }
 
-  const optionsJson = all ? undefined : inputs[command === "account" ? 0 : 1];
+  const optionsJson = all ? undefined : inputs[command === "status" ? 0 : 1];
   let options = {};
   if (optionsJson !== undefined) {
     try {
       options = JSON.parse(optionsJson);
     } catch {
-      throw new Error(
-        "Options must be valid JSON, e.g. '{\"superMode\":true}'.",
-      );
+      throw new Error("Options must be valid JSON, e.g. '{\"super\":true}'.");
     }
     if (
       options === null ||
@@ -180,7 +178,7 @@ async function main() {
       pageUrl = "https://example.com",
       searchQuery = "python web scraping",
     ] = inputs;
-    results.push(await run("account", () => account()));
+    results.push(await run("status", () => status()));
     for (const name of [
       "scrapeHtml",
       "scrapeMarkdown",
@@ -191,8 +189,8 @@ async function main() {
       results.push(await run(name, () => services[name](pageUrl)));
     }
     results.push(await run("webSearch", () => webSearch(searchQuery)));
-  } else if (command === "account") {
-    results.push(await run(command, () => account(options)));
+  } else if (command === "status") {
+    results.push(await run(command, () => status(options)));
   } else {
     const target =
       inputs[0] ??

@@ -1,6 +1,6 @@
 export {
   MrScraperError,
-  account,
+  status,
   scrapeHtml,
   scrapeMarkdown,
   getScreenshot,
@@ -9,8 +9,7 @@ export {
   webSearch,
 } from "./api.js";
 export type {
-  AccountOptions,
-  AccountSummary,
+  StatusOptions,
   PageOptions,
   LoadingOptions,
   HtmlOptions,
