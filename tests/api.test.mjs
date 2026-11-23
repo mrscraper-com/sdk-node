@@ -52,6 +52,50 @@ test("exports exactly seven services plus the error type", () =>
     Object.keys(sdk).sort(),
     [...names, "MrScraperError"].sort(),
   ));
+const SHARED_DEFAULTS = { timeout: "300", saveResult: "true", maxAge: "0" };
+const LOADING_DEFAULTS = { warmStart: "false", blockResources: "false" };
+// Expected default queries, in the documented request order.
+const DEFAULT_QUERIES = {
+  scrapeHtml: {
+    url: URL_TARGET,
+    html: "true",
+    timeout: "300",
+    warmStart: "false",
+    blockResources: "false",
+    saveResult: "true",
+    maxAge: "0",
+    screenshot: "false",
+  },
+  scrapeMarkdown: {
+    url: URL_TARGET,
+    markdown: "true",
+    timeout: "300",
+    warmStart: "false",
+    blockResources: "false",
+    saveResult: "true",
+    maxAge: "0",
+  },
+  getScreenshot: {
+    url: URL_TARGET,
+    screenshot: "full",
+    browserRendering: "true",
+    timeout: "300",
+    saveResult: "true",
+    maxAge: "0",
+  },
+  scrapeJson: {
+    url: URL_TARGET,
+    prompt: "Extract all data as complete as possible.",
+    agent: "general",
+    html: "true",
+    timeout: "300",
+    warmStart: "false",
+    blockResources: "false",
+    saveResult: "true",
+    maxAge: "0",
+    screenshot: "false",
+  },
+};
 for (const name of names)
   test(`wire contract: ${name}`, async () => {
     calls = [];
@@ -86,92 +130,265 @@ for (const name of names)
         action: "brand-scraping",
         url: URL_TARGET,
         bundle: "none",
+        timeout: "300",
+        warmStart: "false",
       });
+      assert.deepEqual(Object.keys(p), [
+        "action",
+        "url",
+        "bundle",
+        "timeout",
+        "warmStart",
+      ]);
       return;
     }
     if (name === "webSearch") {
       assert.deepEqual(p, {
         action: "websearch",
         query: "web scraping",
-        country: "us",
         numResults: "10",
       });
       return;
     }
-    const expected = {
-      url: URL_TARGET,
-      timeout: "300",
-      geoCode: "us",
-      proxyCountry: "us",
-      super: "false",
-      waitUntil: "domcontentloaded",
-      saveResult: "false",
-    };
-    if (name !== "scrapeJson")
-      Object.assign(expected, {
-        blockResources: "false",
-        returnCookie: "false",
-        markdown: name === "scrapeMarkdown" ? "true" : "false",
-      });
-    Object.assign(expected, {
-      browserRendering: name === "getScreenshot" ? "true" : "false",
-      html: ["scrapeHtml", "getScreenshot"].includes(name) ? "true" : "false",
-      screenshot: name === "getScreenshot" ? "full" : "false",
-    });
-    if (name === "scrapeJson")
-      Object.assign(expected, {
-        agent: "general",
-        prompt: "Extract all data as complete as possible.",
-      });
-    if (["scrapeHtml", "scrapeMarkdown"].includes(name))
-      expected.warmStart = "false";
-    assert.deepEqual(p, expected);
+    assert.deepEqual(p, DEFAULT_QUERIES[name]);
+    assert.deepEqual(Object.keys(p), Object.keys(DEFAULT_QUERIES[name]));
   });
-test("forwards explicit controls and preserves false and zero", async () => {
+test("undocumented options never reach the wire", async () => {
   calls = [];
-  await sdk.scrapeHtml(URL_TARGET, {
-    timeout: 15,
-    geoCode: "ID",
-    proxyCountry: "SG",
+  const legacy = {
     super: true,
-    waitUntil: "networkidle2",
+    superMode: true,
+    waitUntil: "load",
+    proxyCountry: "SG",
     proxy: "http://proxy.example",
-    maxRetries: 0,
-    saveResult: true,
-    blockResources: true,
-    waitForSelector: ".ready",
     returnCookie: true,
-    browserRendering: true,
-  });
-  const p = Object.fromEntries(calls[0].url.searchParams);
-  for (const [k, v] of Object.entries({
-    timeout: "15",
-    geoCode: "id",
-    proxyCountry: "sg",
-    super: "true",
-    waitUntil: "networkidle2",
-    proxy: "http://proxy.example",
-    maxRetries: "0",
-    saveResult: "true",
-    blockResources: "true",
-    waitForSelector: ".ready",
-    returnCookie: "true",
-    browserRendering: "true",
-  }))
-    assert.equal(p[k], v);
-});
-test("combines Markdown and screenshot outputs", async () => {
-  calls = [];
-  await sdk.scrapeMarkdown(URL_TARGET, { html: true, browserRendering: false });
+    record: true,
+    bundle: "full",
+  };
+  await sdk.scrapeHtml(URL_TARGET, legacy);
+  await sdk.scrapeMarkdown(URL_TARGET, { ...legacy, html: true, screenshot: "top" });
   await sdk.getScreenshot(URL_TARGET, {
+    ...legacy,
     screenshot: "top",
     html: false,
     markdown: true,
+    browserRendering: false,
+    warmStart: true,
+    blockResources: true,
+    action: "custom",
   });
-  assert.equal(calls[0].url.searchParams.get("browserRendering"), "true");
-  assert.equal(calls[1].url.searchParams.get("screenshot"), "top");
-  assert.equal(calls[1].url.searchParams.get("html"), "false");
-  assert.equal(calls[1].url.searchParams.get("markdown"), "true");
+  await sdk.scrapeJson(URL_TARGET, { ...legacy, action: "custom", markdown: true });
+  assert.deepEqual(
+    calls.map((call) => Object.fromEntries(call.url.searchParams)),
+    [
+      DEFAULT_QUERIES.scrapeHtml,
+      DEFAULT_QUERIES.scrapeMarkdown,
+      DEFAULT_QUERIES.getScreenshot,
+      DEFAULT_QUERIES.scrapeJson,
+    ],
+  );
+});
+test("forwards explicit controls in order and preserves false and zero", async () => {
+  calls = [];
+  const options = {
+    browserRendering: false,
+    timeout: 330,
+    warmStart: true,
+    blockResources: true,
+    waitForSelector: " .ready ",
+    geoCode: "ID",
+    saveResult: false,
+    maxAge: 604800000,
+    tokenCap: 25,
+    maxRetries: 0,
+  };
+  await sdk.scrapeHtml(URL_TARGET, {
+    ...options,
+    action: " analytics ",
+    screenshot: "1920x1080-75",
+  });
+  await sdk.scrapeMarkdown(URL_TARGET, {
+    ...options,
+    browserRendering: true,
+    action: "analytics",
+  });
+  await sdk.getScreenshot(URL_TARGET, options);
+  await sdk.scrapeJson(URL_TARGET, {
+    ...options,
+    prompt: "Extract prices",
+    html: false,
+    screenshot: true,
+  });
+  const loading = { warmStart: "true", blockResources: "true" };
+  const shared = {
+    timeout: "330",
+    waitForSelector: ".ready",
+    geoCode: "id",
+    saveResult: "false",
+    maxAge: "604800000",
+    tokenCap: "25",
+    maxRetries: "0",
+  };
+  const [html, markdown, screenshot, json] = calls.map((call) =>
+    Object.fromEntries(call.url.searchParams),
+  );
+  // A screenshot needs a rendered page, so it overrides browserRendering: false.
+  assert.deepEqual(html, {
+    url: URL_TARGET,
+    html: "true",
+    browserRendering: "true",
+    ...loading,
+    action: "analytics",
+    ...shared,
+    screenshot: "1920x1080-75",
+  });
+  assert.deepEqual(Object.keys(html), [
+    "url",
+    "html",
+    "browserRendering",
+    "timeout",
+    "warmStart",
+    "blockResources",
+    "waitForSelector",
+    "action",
+    "geoCode",
+    "saveResult",
+    "maxAge",
+    "tokenCap",
+    "maxRetries",
+    "screenshot",
+  ]);
+  assert.deepEqual(markdown, {
+    url: URL_TARGET,
+    markdown: "true",
+    browserRendering: "true",
+    ...loading,
+    action: "analytics",
+    ...shared,
+  });
+  assert.deepEqual(screenshot, {
+    url: URL_TARGET,
+    screenshot: "full",
+    browserRendering: "true",
+    ...shared,
+  });
+  assert.deepEqual(json, {
+    url: URL_TARGET,
+    prompt: "Extract prices",
+    agent: "general",
+    html: "false",
+    browserRendering: "false",
+    ...loading,
+    ...shared,
+    screenshot: "true",
+  });
+});
+test("browser rendering is omitted unless set and preserves false", async () => {
+  for (const name of ["scrapeHtml", "scrapeMarkdown", "scrapeJson"]) {
+    for (const browserRendering of [undefined, true, false]) {
+      calls = [];
+      await sdk[name](URL_TARGET, { browserRendering });
+      assert.equal(
+        calls[0].url.searchParams.get("browserRendering"),
+        browserRendering === undefined ? null : String(browserRendering),
+      );
+    }
+  }
+});
+test("Scrape HTML sends every documented screenshot capture", async () => {
+  calls = [];
+  const captures = [
+    false,
+    "full",
+    "top",
+    "100x100",
+    "1280x800",
+    "3840x3840",
+    "1280x800-25",
+    "1920x1080-300",
+  ];
+  for (const screenshot of captures)
+    await sdk.scrapeHtml(URL_TARGET, { screenshot });
+  assert.deepEqual(
+    calls.map((call) => call.url.searchParams.get("screenshot")),
+    captures.map(String),
+  );
+});
+test("a Scrape HTML screenshot always sends browserRendering=true", async () => {
+  for (const screenshot of [false, "full", "top", "1280x800-75"]) {
+    for (const browserRendering of [undefined, true, false]) {
+      calls = [];
+      await sdk.scrapeHtml(URL_TARGET, { screenshot, browserRendering });
+      assert.equal(
+        calls[0].url.searchParams.get("browserRendering"),
+        screenshot === false
+          ? browserRendering === undefined
+            ? null
+            : String(browserRendering)
+          : "true",
+        `${screenshot} with browserRendering ${browserRendering}`,
+      );
+    }
+  }
+});
+test("Scrape Brand forwards timeout, warm start, and geo code in order", async () => {
+  calls = [];
+  await sdk.scrapeBrand(URL_TARGET, {
+    timeout: 120,
+    warmStart: true,
+    geoCode: "GB",
+    saveResult: false,
+    maxAge: 0,
+    bundle: "full",
+  });
+  const p = Object.fromEntries(calls[0].url.searchParams);
+  assert.deepEqual(p, {
+    action: "brand-scraping",
+    url: URL_TARGET,
+    bundle: "none",
+    timeout: "120",
+    warmStart: "true",
+    geoCode: "gb",
+  });
+  assert.deepEqual(Object.keys(p), [
+    "action",
+    "url",
+    "bundle",
+    "timeout",
+    "warmStart",
+    "geoCode",
+  ]);
+});
+test("HTTP deadlines: page timeout plus 30 seconds, fixed for search", async () => {
+  const delays = [];
+  const original = globalThis.setTimeout;
+  globalThis.setTimeout = (fn, ms, ...rest) => {
+    delays.push(ms);
+    return original(fn, ms, ...rest);
+  };
+  try {
+    await sdk.scrapeBrand(URL_TARGET);
+    assert.ok(delays.includes(330_000), "brand default 300 + 30 seconds");
+    await sdk.scrapeBrand(URL_TARGET, { timeout: 120 });
+    assert.ok(delays.includes(150_000), "brand 120 + 30 seconds");
+    await sdk.scrapeHtml(URL_TARGET, { timeout: 60 });
+    assert.ok(delays.includes(90_000), "page 60 + 30 seconds");
+    delays.length = 0;
+    await sdk.webSearch("web scraping", { numResults: 10 });
+    assert.ok(delays.includes(120_000), "search stays at 120 seconds");
+  } finally {
+    globalThis.setTimeout = original;
+  }
+});
+test("web search sends a country only when set", async () => {
+  calls = [];
+  await sdk.webSearch("running shoes", { country: "ID", numResults: 100 });
+  assert.deepEqual(Object.fromEntries(calls[0].url.searchParams), {
+    action: "websearch",
+    query: "running shoes",
+    country: "id",
+    numResults: "100",
+  });
 });
 test("long JSON prompts use POST with only extraction fields in body", async () => {
   calls = [];
@@ -184,19 +401,18 @@ test("long JSON prompts use POST with only extraction fields in body", async () 
     prompt,
     agent: "general",
   });
-  for (const key of [
-    "url",
-    "prompt",
-    "agent",
-    "blockResources",
-    "returnCookie",
-    "token",
-  ])
+  for (const key of ["url", "prompt", "agent", "token"])
     assert.ok(!req.url.searchParams.has(key));
-  assert.equal(req.url.searchParams.get("maxRetries"), "0");
+  assert.deepEqual(Object.fromEntries(req.url.searchParams), {
+    html: "true",
+    ...LOADING_DEFAULTS,
+    ...SHARED_DEFAULTS,
+    maxRetries: "0",
+    screenshot: "false",
+  });
 });
 
-for (const name of ["scrapeHtml", "scrapeMarkdown"])
+for (const name of ["scrapeHtml", "scrapeMarkdown", "scrapeJson"])
   test(`warmStart forwarding: ${name}`, async () => {
     calls = [];
     for (const warmStart of [false, true]) {
@@ -215,3 +431,8 @@ for (const name of ["scrapeHtml", "scrapeMarkdown"])
     }
     assert.equal(calls.length, sent);
   });
+test("Get screenshot ignores loading controls", async () => {
+  calls = [];
+  await sdk.getScreenshot(URL_TARGET, { warmStart: true });
+  assert.ok(!calls[0].url.searchParams.has("warmStart"));
+});
