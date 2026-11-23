@@ -59,6 +59,7 @@ const DEFAULT_QUERIES = {
   scrapeHtml: {
     url: URL_TARGET,
     html: "true",
+    markdown: "false",
     timeout: "300",
     warmStart: "false",
     blockResources: "false",
@@ -69,6 +70,8 @@ const DEFAULT_QUERIES = {
   scrapeMarkdown: {
     url: URL_TARGET,
     markdown: "true",
+    html: "false",
+    screenshot: "false",
     timeout: "300",
     warmStart: "false",
     blockResources: "false",
@@ -78,6 +81,8 @@ const DEFAULT_QUERIES = {
   getScreenshot: {
     url: URL_TARGET,
     screenshot: "full",
+    html: "false",
+    markdown: "false",
     browserRendering: "true",
     timeout: "300",
     saveResult: "true",
@@ -130,16 +135,9 @@ for (const name of names)
         action: "brand-scraping",
         url: URL_TARGET,
         bundle: "none",
-        timeout: "300",
         warmStart: "false",
       });
-      assert.deepEqual(Object.keys(p), [
-        "action",
-        "url",
-        "bundle",
-        "timeout",
-        "warmStart",
-      ]);
+      assert.deepEqual(Object.keys(p), ["action", "url", "bundle", "warmStart"]);
       return;
     }
     if (name === "webSearch") {
@@ -164,6 +162,8 @@ test("undocumented options never reach the wire", async () => {
     returnCookie: true,
     record: true,
     bundle: "full",
+    saveResult: false,
+    tokenCap: 5,
   };
   await sdk.scrapeHtml(URL_TARGET, legacy);
   await sdk.scrapeMarkdown(URL_TARGET, { ...legacy, html: true, screenshot: "top" });
@@ -197,9 +197,7 @@ test("forwards explicit controls in order and preserves false and zero", async (
     blockResources: true,
     waitForSelector: " .ready ",
     geoCode: "ID",
-    saveResult: false,
     maxAge: 604800000,
-    tokenCap: 25,
     maxRetries: 0,
   };
   await sdk.scrapeHtml(URL_TARGET, {
@@ -224,9 +222,8 @@ test("forwards explicit controls in order and preserves false and zero", async (
     timeout: "330",
     waitForSelector: ".ready",
     geoCode: "id",
-    saveResult: "false",
+    saveResult: "true",
     maxAge: "604800000",
-    tokenCap: "25",
     maxRetries: "0",
   };
   const [html, markdown, screenshot, json] = calls.map((call) =>
@@ -236,6 +233,7 @@ test("forwards explicit controls in order and preserves false and zero", async (
   assert.deepEqual(html, {
     url: URL_TARGET,
     html: "true",
+    markdown: "false",
     browserRendering: "true",
     ...loading,
     action: "analytics",
@@ -245,6 +243,7 @@ test("forwards explicit controls in order and preserves false and zero", async (
   assert.deepEqual(Object.keys(html), [
     "url",
     "html",
+    "markdown",
     "browserRendering",
     "timeout",
     "warmStart",
@@ -254,13 +253,14 @@ test("forwards explicit controls in order and preserves false and zero", async (
     "geoCode",
     "saveResult",
     "maxAge",
-    "tokenCap",
     "maxRetries",
     "screenshot",
   ]);
   assert.deepEqual(markdown, {
     url: URL_TARGET,
     markdown: "true",
+    html: "false",
+    screenshot: "false",
     browserRendering: "true",
     ...loading,
     action: "analytics",
@@ -269,9 +269,24 @@ test("forwards explicit controls in order and preserves false and zero", async (
   assert.deepEqual(screenshot, {
     url: URL_TARGET,
     screenshot: "full",
+    html: "false",
+    markdown: "false",
     browserRendering: "true",
     ...shared,
   });
+  assert.deepEqual(Object.keys(markdown).slice(0, 4), [
+    "url",
+    "markdown",
+    "html",
+    "screenshot",
+  ]);
+  assert.deepEqual(Object.keys(screenshot).slice(0, 5), [
+    "url",
+    "screenshot",
+    "html",
+    "markdown",
+    "browserRendering",
+  ]);
   assert.deepEqual(json, {
     url: URL_TARGET,
     prompt: "Extract prices",
@@ -333,6 +348,14 @@ test("a Scrape HTML screenshot always sends browserRendering=true", async () => 
 });
 test("Scrape Brand forwards timeout, warm start, and geo code in order", async () => {
   calls = [];
+  await sdk.scrapeBrand(URL_TARGET, { warmStart: true });
+  assert.deepEqual(Object.fromEntries(calls[0].url.searchParams), {
+    action: "brand-scraping",
+    url: URL_TARGET,
+    bundle: "none",
+    warmStart: "true",
+  });
+  calls = [];
   await sdk.scrapeBrand(URL_TARGET, {
     timeout: 120,
     warmStart: true,
@@ -368,7 +391,7 @@ test("HTTP deadlines: page timeout plus 30 seconds, fixed for search", async () 
   };
   try {
     await sdk.scrapeBrand(URL_TARGET);
-    assert.ok(delays.includes(330_000), "brand default 300 + 30 seconds");
+    assert.ok(delays.includes(330_000), "brand without a timeout: 300 + 30 seconds");
     await sdk.scrapeBrand(URL_TARGET, { timeout: 120 });
     assert.ok(delays.includes(150_000), "brand 120 + 30 seconds");
     await sdk.scrapeHtml(URL_TARGET, { timeout: 60 });

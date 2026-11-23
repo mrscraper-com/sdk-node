@@ -30,12 +30,8 @@ export interface PageOptions {
   waitForSelector?: string;
   /** Two-letter country code to load the page from, sent in lowercase. */
   geoCode?: string;
-  /** Whether to save the result to the dashboard Result tab. */
-  saveResult?: boolean;
   /** Return a cached result of the same request when it is newer than the selected age. A cached result costs the same tokens as the original scrape. */
   maxAge?: number;
-  /** Maximum total tokens the scrape and its retries can use, as a positive integer. Omit this parameter for no limit. */
-  tokenCap?: number;
   /** Maximum number of retries, as a nonnegative integer. Omit this parameter for no limit. */
   maxRetries?: number;
 }
@@ -333,9 +329,7 @@ interface PageFields {
   timeout: number;
   waitForSelector?: string;
   geoCode?: string;
-  saveResult: boolean;
   maxAge: number;
-  tokenCap?: number;
   maxRetries?: number;
 }
 interface LoadingFields {
@@ -348,9 +342,7 @@ function pageFields(url: string, options: PageOptions): PageFields {
     timeout = 300,
     waitForSelector,
     geoCode,
-    saveResult = true,
     maxAge = 0,
-    tokenCap,
     maxRetries,
   } = options;
   return {
@@ -358,10 +350,7 @@ function pageFields(url: string, options: PageOptions): PageFields {
     timeout: integer("timeout", timeout, 1, MAX_TIMEOUT_SECONDS),
     waitForSelector: selector(waitForSelector),
     geoCode: geoCode === undefined ? undefined : country("geoCode", geoCode),
-    saveResult: boolean("saveResult", saveResult),
     maxAge: integer("maxAge", maxAge, 0, MAX_CACHE_AGE_MS),
-    tokenCap:
-      tokenCap === undefined ? undefined : integer("tokenCap", tokenCap, 1),
     maxRetries:
       maxRetries === undefined
         ? undefined
@@ -392,9 +381,9 @@ function sharedFields(
     waitForSelector: page.waitForSelector,
     action,
     geoCode: page.geoCode,
-    saveResult: page.saveResult,
+    // Results are always saved to the dashboard; saveResult is not an option.
+    saveResult: true,
     maxAge: page.maxAge,
-    tokenCap: page.tokenCap,
     maxRetries: page.maxRetries,
   };
 }
@@ -437,6 +426,7 @@ export async function scrapeHtml<T = PageData>(
   const params = compact({
     url: page.url,
     html: true,
+    markdown: false,
     ...sharedFields(page, loading, optionalText("action", options.action)),
     screenshot,
   });
@@ -454,6 +444,8 @@ export async function scrapeMarkdown<T = PageData>(
   const params = compact({
     url: page.url,
     markdown: true,
+    html: false,
+    screenshot: false,
     ...sharedFields(
       page,
       loadingFields(options),
@@ -474,6 +466,8 @@ export async function getScreenshot<T = PageData>(
   const params = compact({
     url: page.url,
     screenshot: "full",
+    html: false,
+    markdown: false,
     ...sharedFields(page, { browserRendering: true }),
   });
   return get<T>(params, options, page.timeout + 30);
@@ -529,16 +523,20 @@ export async function scrapeBrand<T = unknown>(
   url: string,
   options: BrandOptions = {},
 ): Promise<MrScraperResponse<T>> {
-  const { timeout = 300, geoCode } = options;
+  const { timeout, geoCode } = options;
   const params = compact({
     action: "brand-scraping",
     url: pageUrl(url),
     bundle: "none",
-    timeout: integer("timeout", timeout, 1, MAX_TIMEOUT_SECONDS),
+    // timeout and geoCode are sent only when set.
+    timeout:
+      timeout === undefined
+        ? undefined
+        : integer("timeout", timeout, 1, MAX_TIMEOUT_SECONDS),
     warmStart: boolean("warmStart", options.warmStart ?? false),
     geoCode: geoCode === undefined ? undefined : country("geoCode", geoCode),
   });
-  return get<T>(params, options, Number(params.timeout) + 30);
+  return get<T>(params, options, (timeout ?? 300) + 30);
 }
 /** Search the web and return ranked results with titles, URLs, descriptions, and sources.
  * @param query Search query text, trimmed before sending, containing 1 to 1000 characters.

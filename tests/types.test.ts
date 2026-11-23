@@ -24,9 +24,7 @@ const h: Promise<MrScraperResponse<PageData>> = scrapeHtml(
     waitForSelector: "body",
     action: "analytics",
     geoCode: "gb",
-    saveResult: false,
     maxAge: 86400000,
-    tokenCap: 50,
     maxRetries: 0,
     screenshot: "1920x1080-75",
   },
@@ -42,7 +40,6 @@ void scrapeMarkdown("https://example.com", { action: "analytics", maxAge: 0 });
 void getScreenshot("https://example.com", {
   waitForSelector: "#results",
   geoCode: "de",
-  tokenCap: 10,
 });
 void scrapeBrand("https://example.com");
 void scrapeBrand("https://example.com", {
@@ -84,6 +81,14 @@ void scrapeMarkdown("https://example.com", { proxy: "http://proxy" });
 void scrapeHtml("https://example.com", { returnCookie: true });
 // @ts-expect-error camelCase options
 void webSearch("test", { num_results: 10 });
+// @ts-expect-error results are always saved; saveResult is not an option
+void scrapeHtml("https://example.com", { saveResult: false });
+// @ts-expect-error results are always saved; saveResult is not an option
+void scrapeJson("https://example.com", { saveResult: false });
+// @ts-expect-error tokenCap is not sent
+void scrapeMarkdown("https://example.com", { tokenCap: 10 });
+// @ts-expect-error tokenCap is not sent
+void getScreenshot("https://example.com", { tokenCap: 10 });
 // @ts-expect-error brand does not save results
 void scrapeBrand("https://example.com", { saveResult: true });
 // @ts-expect-error brand has no cache age

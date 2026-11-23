@@ -25,13 +25,10 @@ const invalidPageOptions = [
   { maxAge: -1 },
   { maxAge: 604800001 },
   { maxAge: 1.5 },
-  { tokenCap: 0 },
-  { tokenCap: 1.5 },
   { geoCode: "usa" },
   { geoCode: "" },
   { waitForSelector: " " },
   { waitForSelector: "a".repeat(501) },
-  { saveResult: "false" },
 ];
 for (const [fn, extra] of [
   ...pageServices.flatMap((fn) =>
