@@ -55,13 +55,6 @@ for (const [fn, extra] of [
   [scrapeJson, { prompt: " " }],
   [scrapeJson, { html: "true" }],
   [scrapeJson, { screenshot: "full" }],
-  [scrapeBrand, { timeout: 0 }],
-  [scrapeBrand, { timeout: 331 }],
-  [scrapeBrand, { timeout: 1.5 }],
-  [scrapeBrand, { warmStart: "true" }],
-  [scrapeBrand, { warmStart: 1 }],
-  [scrapeBrand, { geoCode: "usa" }],
-  [scrapeBrand, { geoCode: "" }],
 ])
   test(`${fn.name} rejects invalid ${JSON.stringify(extra).slice(0, 60)}`, async () => {
     globalThis.fetch = () => {

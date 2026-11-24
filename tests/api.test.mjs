@@ -135,9 +135,8 @@ for (const name of names)
         action: "brand-scraping",
         url: URL_TARGET,
         bundle: "none",
-        warmStart: "false",
       });
-      assert.deepEqual(Object.keys(p), ["action", "url", "bundle", "warmStart"]);
+      assert.deepEqual(Object.keys(p), ["action", "url", "bundle"]);
       return;
     }
     if (name === "webSearch") {
@@ -346,15 +345,7 @@ test("a Scrape HTML screenshot always sends browserRendering=true", async () => 
     }
   }
 });
-test("Scrape Brand forwards timeout, warm start, and geo code in order", async () => {
-  calls = [];
-  await sdk.scrapeBrand(URL_TARGET, { warmStart: true });
-  assert.deepEqual(Object.fromEntries(calls[0].url.searchParams), {
-    action: "brand-scraping",
-    url: URL_TARGET,
-    bundle: "none",
-    warmStart: "true",
-  });
+test("Scrape Brand sends only action, url, and bundle", async () => {
   calls = [];
   await sdk.scrapeBrand(URL_TARGET, {
     timeout: 120,
@@ -369,20 +360,10 @@ test("Scrape Brand forwards timeout, warm start, and geo code in order", async (
     action: "brand-scraping",
     url: URL_TARGET,
     bundle: "none",
-    timeout: "120",
-    warmStart: "true",
-    geoCode: "gb",
   });
-  assert.deepEqual(Object.keys(p), [
-    "action",
-    "url",
-    "bundle",
-    "timeout",
-    "warmStart",
-    "geoCode",
-  ]);
+  assert.deepEqual(Object.keys(p), ["action", "url", "bundle"]);
 });
-test("HTTP deadlines: page timeout plus 30 seconds, fixed for search", async () => {
+test("HTTP deadlines: page timeout plus 30 seconds, fixed for brand and search", async () => {
   const delays = [];
   const original = globalThis.setTimeout;
   globalThis.setTimeout = (fn, ms, ...rest) => {
@@ -390,12 +371,15 @@ test("HTTP deadlines: page timeout plus 30 seconds, fixed for search", async () 
     return original(fn, ms, ...rest);
   };
   try {
-    await sdk.scrapeBrand(URL_TARGET);
-    assert.ok(delays.includes(330_000), "brand without a timeout: 300 + 30 seconds");
-    await sdk.scrapeBrand(URL_TARGET, { timeout: 120 });
-    assert.ok(delays.includes(150_000), "brand 120 + 30 seconds");
     await sdk.scrapeHtml(URL_TARGET, { timeout: 60 });
     assert.ok(delays.includes(90_000), "page 60 + 30 seconds");
+    delays.length = 0;
+    await sdk.scrapeBrand(URL_TARGET);
+    assert.ok(delays.includes(120_000), "brand stays at 120 seconds");
+    delays.length = 0;
+    await sdk.scrapeBrand(URL_TARGET, { timeout: 60 });
+    assert.ok(delays.includes(120_000), "brand ignores a timeout option");
+    assert.ok(!delays.includes(90_000));
     delays.length = 0;
     await sdk.webSearch("web scraping", { numResults: 10 });
     assert.ok(delays.includes(120_000), "search stays at 120 seconds");

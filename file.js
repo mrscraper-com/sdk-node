@@ -32,7 +32,6 @@ Examples:
   node file.js scrapeMarkdown https://example.com '{"browserRendering":false,"blockResources":true}'
   node file.js getScreenshot https://example.com '{"waitForSelector":"body","timeout":120}'
   node file.js scrapeBrand https://example.com
-  node file.js scrapeBrand https://example.com '{"timeout":120,"warmStart":true,"geoCode":"gb"}'
   node file.js scrapeJson https://example.com '{"prompt":"Extract titles and prices","html":false}'
   node file.js webSearch "web scraping" '{"country":"id","numResults":20}'
 Options use the camelCase names documented in the README, such as browserRendering,

@@ -76,12 +76,6 @@ export interface JsonOptions extends PageOptions, LoadingOptions {
 export interface BrandOptions {
   /** API key used to authenticate the request. */
   token?: string;
-  /** Maximum seconds to wait for the scrape, from 1 to 330. The HTTP request allows 30 additional seconds. */
-  timeout?: number;
-  /** Whether to open the site's home page first to warm the session before loading the target URL. */
-  warmStart?: boolean;
-  /** Two-letter country code to load the page from, sent in lowercase. */
-  geoCode?: string;
 }
 export interface WebSearchOptions {
   /** API key used to authenticate the request. */
@@ -523,20 +517,11 @@ export async function scrapeBrand<T = unknown>(
   url: string,
   options: BrandOptions = {},
 ): Promise<MrScraperResponse<T>> {
-  const { timeout, geoCode } = options;
-  const params = compact({
-    action: "brand-scraping",
-    url: pageUrl(url),
-    bundle: "none",
-    // timeout and geoCode are sent only when set.
-    timeout:
-      timeout === undefined
-        ? undefined
-        : integer("timeout", timeout, 1, MAX_TIMEOUT_SECONDS),
-    warmStart: boolean("warmStart", options.warmStart ?? false),
-    geoCode: geoCode === undefined ? undefined : country("geoCode", geoCode),
-  });
-  return get<T>(params, options, (timeout ?? 300) + 30);
+  return get<T>(
+    { action: "brand-scraping", url: pageUrl(url), bundle: "none" },
+    options,
+    120,
+  );
 }
 /** Search the web and return ranked results with titles, URLs, descriptions, and sources.
  * @param query Search query text, trimmed before sending, containing 1 to 1000 characters.

@@ -42,11 +42,6 @@ void getScreenshot("https://example.com", {
   geoCode: "de",
 });
 void scrapeBrand("https://example.com");
-void scrapeBrand("https://example.com", {
-  timeout: 120,
-  warmStart: true,
-  geoCode: "gb",
-});
 void scrapeJson<{ title: string }>("https://example.com", {
   prompt: "Extract title",
   html: false,
@@ -95,8 +90,12 @@ void scrapeBrand("https://example.com", { saveResult: true });
 void scrapeBrand("https://example.com", { maxAge: 0 });
 // @ts-expect-error brand sends bundle=none
 void scrapeBrand("https://example.com", { bundle: "full" });
-// @ts-expect-error brand warmStart is strictly boolean
-void scrapeBrand("https://example.com", { warmStart: "true" });
+// @ts-expect-error brand accepts only the URL and authentication
+void scrapeBrand("https://example.com", { timeout: 120 });
+// @ts-expect-error brand accepts only the URL and authentication
+void scrapeBrand("https://example.com", { warmStart: true });
+// @ts-expect-error brand accepts only the URL and authentication
+void scrapeBrand("https://example.com", { geoCode: "gb" });
 
 // @ts-expect-error status has no service timeout option
 void status({ timeout: 30 });

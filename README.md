@@ -59,7 +59,7 @@ Response examples show selected keys and types observed in live API responses. V
 
 ### Page controls
 
-HTML, Markdown, screenshots, and JSON extraction share `url`, `timeout`, `waitForSelector`, `geoCode`, `maxAge`, and `maxRetries` (using the naming style shown below). Defaults are a 300-second timeout (up to 330) and a `maxAge` of 0 milliseconds, which always scrapes fresh; `maxAge` accepts up to 604800000 (7 days). `geoCode` and `maxRetries` are omitted unless set, so the API loads the page from the United States with no retry limit. Results are always saved to the dashboard (`saveResult=true`), and `tokenCap` is never sent. Scrape brand accepts `url`, `timeout`, `warmStart`, and `geoCode`: it always sends `warmStart` (default `false`) and sends `timeout` and `geoCode` only when set. Exact types, defaults, and standard descriptions appear in each service table.
+HTML, Markdown, screenshots, and JSON extraction share `url`, `timeout`, `waitForSelector`, `geoCode`, `maxAge`, and `maxRetries` (using the naming style shown below). Defaults are a 300-second timeout (up to 330) and a `maxAge` of 0 milliseconds, which always scrapes fresh; `maxAge` accepts up to 604800000 (7 days). `geoCode` and `maxRetries` are omitted unless set, so the API loads the page from the United States with no retry limit. Results are always saved to the dashboard (`saveResult=true`), and `tokenCap` is never sent. Exact types, defaults, and standard descriptions appear in each service table.
 
 ### Loading controls
 
@@ -312,23 +312,20 @@ Extract a website's colors, typography, logos, and social links as JSON.
 
 #### Parameters
 
-| Parameter   | HTTP field  | Type             | Default  | Description                                                                                           |
-| ----------- | ----------- | ---------------- | -------- | ----------------------------------------------------------------------------------------------------- |
-| `url`       | `url`       | string           | Required | Absolute HTTP or HTTPS URL of the page to process.                                                    |
-| `timeout`   | `timeout`   | number (integer) | Omitted  | Maximum seconds to wait for the scrape, from 1 to 330. The HTTP request allows 30 additional seconds. |
-| `warmStart` | `warmStart` | boolean          | `false`  | Whether to open the site's home page first to warm the session before loading the target URL.         |
-| `geoCode`   | `geoCode`   | string           | Omitted  | Two-letter country code to load the page from, sent in lowercase.                                     |
+| Parameter | HTTP field | Type   | Default  | Description                                        |
+| --------- | ---------- | ------ | -------- | -------------------------------------------------- |
+| `url`     | `url`      | string | Required | Absolute HTTP or HTTPS URL of the page to process. |
 
-The request uses `action=brand-scraping` and `bundle=none` and always sends `warmStart`; `timeout` and `geoCode` are sent only when set. The HTTP request allows the timeout plus 30 seconds, or 330 seconds when `timeout` is omitted.
+The HTTP deadline is fixed at 120 seconds. It is not a service parameter.
+
+The request uses `action=brand-scraping` and `bundle=none`; page controls are not accepted.
 
 #### Example
 
 ```js
 import { scrapeBrand } from "@mrscraper/sdk";
 
-const result = await scrapeBrand("https://example.com", {
-  geoCode: "gb",
-});
+const result = await scrapeBrand("https://example.com");
 console.log(result.data);
 ```
 
@@ -571,7 +568,7 @@ Check environment credentials when authentication fails. Use camelCase option na
 
 ## Migration
 
-Version 6.1.0 matches the Scraper API reference. Removed options: `super`, `waitUntil`, `proxyCountry`, `proxy`, `returnCookie`, `saveResult`, `tokenCap`, `html` for `scrapeMarkdown`, and `screenshot`, `html`, and `markdown` for `getScreenshot`; screenshots always capture the full page. Results are always saved to the dashboard (`saveResult=true`), and `tokenCap` is never sent. New options: `maxAge`, `action` for HTML and Markdown, and `screenshot` for `scrapeHtml`; `scrapeJson` now accepts `warmStart`, `blockResources`, and `waitForSelector`; `scrapeBrand` now accepts `timeout`, `warmStart`, and `geoCode`. Changed defaults: `html: true` for `scrapeJson`, `browserRendering` omitted (automatic), `geoCode` and `country` omitted, and page timeouts up to 330 seconds. Earlier releases replaced `account()` with `status()` and the combined scraper call with the six scraping and search functions.
+Version 6.1.0 matches the Scraper API reference. Removed options: `super`, `waitUntil`, `proxyCountry`, `proxy`, `returnCookie`, `saveResult`, `tokenCap`, `html` for `scrapeMarkdown`, and `screenshot`, `html`, and `markdown` for `getScreenshot`; screenshots always capture the full page. Results are always saved to the dashboard (`saveResult=true`), and `tokenCap` is never sent. New options: `maxAge`, `action` for HTML and Markdown, and `screenshot` for `scrapeHtml`; `scrapeJson` now accepts `warmStart`, `blockResources`, and `waitForSelector`. Changed defaults: `html: true` for `scrapeJson`, `browserRendering` omitted (automatic), `geoCode` and `country` omitted, and page timeouts up to 330 seconds. Earlier releases replaced `account()` with `status()` and the combined scraper call with the six scraping and search functions.
 
 ## Development and testing
 
