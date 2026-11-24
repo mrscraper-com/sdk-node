@@ -44,13 +44,14 @@ export interface LoadingOptions {
   /** Whether to block images, fonts, and stylesheets while loading the page. */
   blockResources?: boolean;
 }
-/** Scrape HTML screenshot: false, full, top, or a WIDTHxHEIGHT viewport with an optional -ZOOM percent. */
-export type ScreenshotCapture =
-  | false
+/** Screenshot area: full, top, or a WIDTHxHEIGHT viewport with an optional -ZOOM percent. */
+export type ScreenshotArea =
   | "full"
   | "top"
   | `${number}x${number}`
   | `${number}x${number}-${number}`;
+/** Scrape HTML screenshot: false for none, or a screenshot area. */
+export type ScreenshotCapture = false | ScreenshotArea;
 export interface HtmlOptions extends PageOptions, LoadingOptions {
   /** Scraper action that routes the request or simply flags it, useful for separating analytics per domain. */
   action?: string;
@@ -61,9 +62,9 @@ export interface MarkdownOptions extends PageOptions, LoadingOptions {
   /** Scraper action that routes the request or simply flags it, useful for separating analytics per domain. */
   action?: string;
 }
-/** Get screenshot accepts the shared page controls only. */
 export interface ScreenshotOptions extends PageOptions {
-  // The area (full) and browser rendering are fixed request fields.
+  /** Screenshot area to capture: full for the entire scroll height, top for the first viewport, or a WIDTHxHEIGHT viewport from 100 to 3840 pixels with an optional -ZOOM percent from 25 to 300, such as 1280x800 or 1920x1080-75. */
+  screenshot?: ScreenshotArea;
 }
 export interface JsonOptions extends PageOptions, LoadingOptions {
   /** Instructions describing the data to extract. Append Json Schema: and a JSON schema to shape the output. */
@@ -288,28 +289,37 @@ function boolean(name: string, value: boolean): boolean {
     throw new TypeError(`${name} must be a boolean`);
   return value;
 }
-/** Accept false, full, top, or a WIDTHxHEIGHT viewport with an optional -ZOOM. */
-function screenshotCapture(value: ScreenshotCapture): ScreenshotCapture {
-  if (value === false || value === "full" || value === "top") return value;
+/** Whether a value is full, top, or a WIDTHxHEIGHT viewport with an optional -ZOOM. */
+function isScreenshotArea(value: unknown): value is ScreenshotArea {
+  if (value === "full" || value === "top") return true;
   const match =
     typeof value === "string" ? SCREENSHOT_VIEWPORT.exec(value) : null;
-  if (match) {
-    const width = Number(match[1]);
-    const height = Number(match[2]);
-    const zoom = match[3] === undefined ? 100 : Number(match[3]);
-    if (
-      width >= 100 &&
-      width <= 3840 &&
-      height >= 100 &&
-      height <= 3840 &&
-      zoom >= 25 &&
-      zoom <= 300
-    )
-      return value;
-  }
-  throw new TypeError(
-    "screenshot must be false, full, top, or WIDTHxHEIGHT from 100 to 3840 pixels with an optional -ZOOM from 25 to 300, such as 1280x800 or 1920x1080-75",
+  if (!match) return false;
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  const zoom = match[3] === undefined ? 100 : Number(match[3]);
+  return (
+    width >= 100 &&
+    width <= 3840 &&
+    height >= 100 &&
+    height <= 3840 &&
+    zoom >= 25 &&
+    zoom <= 300
   );
+}
+const SCREENSHOT_AREA_HINT =
+  "WIDTHxHEIGHT from 100 to 3840 pixels with an optional -ZOOM from 25 to 300, such as 1280x800 or 1920x1080-75";
+/** Scrape HTML screenshot: false, full, top, or a custom viewport. */
+function screenshotCapture(value: ScreenshotCapture): ScreenshotCapture {
+  if (value === false || isScreenshotArea(value)) return value;
+  throw new TypeError(
+    `screenshot must be false, full, top, or ${SCREENSHOT_AREA_HINT}`,
+  );
+}
+/** Get screenshot area: full, top, or a custom viewport. */
+function screenshotArea(value: ScreenshotArea): ScreenshotArea {
+  if (isScreenshotArea(value)) return value;
+  throw new TypeError(`screenshot must be full, top, or ${SCREENSHOT_AREA_HINT}`);
 }
 /** Drop omitted fields; explicit false and 0 are sent. */
 function compact(fields: Fields): Params {
@@ -448,7 +458,7 @@ export async function scrapeMarkdown<T = PageData>(
   });
   return get<T>(params, options, page.timeout + 30);
 }
-/** Capture a base64 PNG screenshot of the full page. Browser rendering is always enabled.
+/** Capture a base64 PNG screenshot of the full page, the first viewport, or a custom viewport. Browser rendering is always enabled.
  * @param url Absolute HTTP or HTTPS URL of the page to process.
  * @param options Service options and authentication.
  */
@@ -459,7 +469,9 @@ export async function getScreenshot<T = PageData>(
   const page = pageFields(url, options);
   const params = compact({
     url: page.url,
-    screenshot: "full",
+    screenshot: screenshotArea(
+      options.screenshot === undefined ? "full" : options.screenshot,
+    ),
     html: false,
     markdown: false,
     ...sharedFields(page, { browserRendering: true }),

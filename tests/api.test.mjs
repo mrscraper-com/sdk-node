@@ -168,8 +168,7 @@ test("undocumented options never reach the wire", async () => {
   await sdk.scrapeMarkdown(URL_TARGET, { ...legacy, html: true, screenshot: "top" });
   await sdk.getScreenshot(URL_TARGET, {
     ...legacy,
-    screenshot: "top",
-    html: false,
+    html: true,
     markdown: true,
     browserRendering: false,
     warmStart: true,
@@ -438,6 +437,48 @@ for (const name of ["scrapeHtml", "scrapeMarkdown", "scrapeJson"])
     }
     assert.equal(calls.length, sent);
   });
+test("Get screenshot sends the requested area in the documented order", async () => {
+  calls = [];
+  const areas = ["full", "top", "100x100", "1280x800", "3840x3840", "1920x1080-75", "1280x800-25", "1280x800-300"];
+  for (const screenshot of areas)
+    await sdk.getScreenshot(URL_TARGET, { screenshot });
+  for (const [index, call] of calls.entries()) {
+    const p = Object.fromEntries(call.url.searchParams);
+    assert.deepEqual(p, { ...DEFAULT_QUERIES.getScreenshot, screenshot: areas[index] });
+    assert.deepEqual(Object.keys(p), [
+      "url",
+      "screenshot",
+      "html",
+      "markdown",
+      "browserRendering",
+      "timeout",
+      "saveResult",
+      "maxAge",
+    ]);
+  }
+  calls = [];
+  await sdk.getScreenshot(URL_TARGET, {
+    screenshot: "top",
+    timeout: 120,
+    waitForSelector: "#results",
+    geoCode: "GB",
+    maxAge: 60000,
+    maxRetries: 0,
+  });
+  assert.deepEqual(Object.keys(Object.fromEntries(calls[0].url.searchParams)), [
+    "url",
+    "screenshot",
+    "html",
+    "markdown",
+    "browserRendering",
+    "timeout",
+    "waitForSelector",
+    "geoCode",
+    "saveResult",
+    "maxAge",
+    "maxRetries",
+  ]);
+});
 test("Get screenshot ignores loading controls", async () => {
   calls = [];
   await sdk.getScreenshot(URL_TARGET, { warmStart: true });

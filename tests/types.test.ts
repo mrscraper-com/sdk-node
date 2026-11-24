@@ -10,6 +10,7 @@ import {
 import type {
   MrScraperResponse,
   PageData,
+  ScreenshotArea,
   ScreenshotCapture,
   WebSearchResponse,
 } from "../src/index.js";
@@ -54,8 +55,18 @@ void scrapeJson<{ title: string }>("https://example.com", {
 void scrapeHtml("https://example.com", { screenshot: true });
 // @ts-expect-error Scrape JSON screenshots are a boolean
 void scrapeJson("https://example.com", { screenshot: "full" });
-// @ts-expect-error Get screenshot always captures the full page
+void getScreenshot("https://example.com", { screenshot: "full" });
 void getScreenshot("https://example.com", { screenshot: "top" });
+void getScreenshot("https://example.com", { screenshot: "1280x800" });
+void getScreenshot("https://example.com", { screenshot: "1920x1080-75" });
+const areas: ScreenshotArea[] = ["full", "top", "1280x800", "1920x1080-75"];
+void areas;
+// @ts-expect-error Get screenshot has no false area
+void getScreenshot("https://example.com", { screenshot: false });
+// @ts-expect-error Get screenshot takes an area, not a boolean
+void getScreenshot("https://example.com", { screenshot: true });
+// @ts-expect-error the area is full, top, or WIDTHxHEIGHT
+void getScreenshot("https://example.com", { screenshot: "bottom" });
 // @ts-expect-error Get screenshot always renders in a browser
 void getScreenshot("https://example.com", { browserRendering: false });
 // @ts-expect-error Get screenshot has no warm start

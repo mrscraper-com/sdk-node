@@ -31,6 +31,8 @@ Examples:
   node file.js scrapeHtml https://example.com '{"screenshot":"top","maxAge":3600000,"geoCode":"gb"}'
   node file.js scrapeMarkdown https://example.com '{"browserRendering":false,"blockResources":true}'
   node file.js getScreenshot https://example.com '{"waitForSelector":"body","timeout":120}'
+  node file.js getScreenshot https://example.com '{"screenshot":"top"}'
+  node file.js getScreenshot https://example.com '{"screenshot":"1920x1080-75"}'
   node file.js scrapeBrand https://example.com
   node file.js scrapeJson https://example.com '{"prompt":"Extract titles and prices","html":false}'
   node file.js webSearch "web scraping" '{"country":"id","numResults":20}'

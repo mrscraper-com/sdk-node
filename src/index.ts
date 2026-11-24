@@ -18,6 +18,7 @@ export type {
   JsonOptions,
   BrandOptions,
   PageData,
+  ScreenshotArea,
   ScreenshotCapture,
   WebSearchOptions,
   WebSearchResult,
