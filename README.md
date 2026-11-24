@@ -567,10 +567,6 @@ if (
 
 Check environment credentials when authentication fails. Use camelCase option names rather than snake_case. Page timeouts are integers from 1 to 330; status and search do not expose timeout options.
 
-## Migration
-
-Version 6.1.0 matches the Scraper API reference. Removed options: `super`, `waitUntil`, `proxyCountry`, `proxy`, `returnCookie`, `saveResult`, `tokenCap`, `html` for `scrapeMarkdown`, and `html` and `markdown` for `getScreenshot`; its `screenshot` option still defaults to `"full"` and now also accepts a `WIDTHxHEIGHT[-ZOOM]` viewport. Results are always saved to the dashboard (`saveResult=true`), and `tokenCap` is never sent. New options: `maxAge`, `action` for HTML and Markdown, and `screenshot` for `scrapeHtml`; `scrapeJson` now accepts `warmStart`, `blockResources`, and `waitForSelector`. Changed defaults: `html: true` for `scrapeJson`, `browserRendering` omitted (automatic), `geoCode` and `country` omitted, and page timeouts up to 330 seconds. Earlier releases replaced `account()` with `status()` and the combined scraper call with the six scraping and search functions.
-
 ## Development and testing
 
 ### Automated checks
