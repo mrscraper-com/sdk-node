@@ -38,8 +38,6 @@ for (const [fn, extra] of [
     [fn, { browserRendering: "true" }],
     [fn, { blockResources: 1 }],
   ]),
-  [scrapeHtml, { action: " " }],
-  [scrapeMarkdown, { action: " " }],
   ...[
     true,
     "",

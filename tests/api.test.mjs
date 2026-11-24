@@ -163,6 +163,7 @@ test("undocumented options never reach the wire", async () => {
     bundle: "full",
     saveResult: false,
     tokenCap: 5,
+    action: "custom",
   };
   await sdk.scrapeHtml(URL_TARGET, legacy);
   await sdk.scrapeMarkdown(URL_TARGET, { ...legacy, html: true, screenshot: "top" });
@@ -173,9 +174,10 @@ test("undocumented options never reach the wire", async () => {
     browserRendering: false,
     warmStart: true,
     blockResources: true,
-    action: "custom",
   });
-  await sdk.scrapeJson(URL_TARGET, { ...legacy, action: "custom", markdown: true });
+  await sdk.scrapeJson(URL_TARGET, { ...legacy, markdown: true });
+  for (const call of calls)
+    assert.ok(!call.url.searchParams.has("action"), call.url.search);
   assert.deepEqual(
     calls.map((call) => Object.fromEntries(call.url.searchParams)),
     [
@@ -200,13 +202,11 @@ test("forwards explicit controls in order and preserves false and zero", async (
   };
   await sdk.scrapeHtml(URL_TARGET, {
     ...options,
-    action: " analytics ",
     screenshot: "1920x1080-75",
   });
   await sdk.scrapeMarkdown(URL_TARGET, {
     ...options,
     browserRendering: true,
-    action: "analytics",
   });
   await sdk.getScreenshot(URL_TARGET, options);
   await sdk.scrapeJson(URL_TARGET, {
@@ -234,7 +234,6 @@ test("forwards explicit controls in order and preserves false and zero", async (
     markdown: "false",
     browserRendering: "true",
     ...loading,
-    action: "analytics",
     ...shared,
     screenshot: "1920x1080-75",
   });
@@ -247,7 +246,6 @@ test("forwards explicit controls in order and preserves false and zero", async (
     "warmStart",
     "blockResources",
     "waitForSelector",
-    "action",
     "geoCode",
     "saveResult",
     "maxAge",
@@ -261,7 +259,6 @@ test("forwards explicit controls in order and preserves false and zero", async (
     screenshot: "false",
     browserRendering: "true",
     ...loading,
-    action: "analytics",
     ...shared,
   });
   assert.deepEqual(screenshot, {

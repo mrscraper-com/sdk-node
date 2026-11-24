@@ -37,7 +37,7 @@ Examples:
   node file.js scrapeJson https://example.com '{"prompt":"Extract titles and prices","html":false}'
   node file.js webSearch "web scraping" '{"country":"id","numResults":20}'
 Options use the camelCase names documented in the README, such as browserRendering,
-timeout, warmStart, blockResources, waitForSelector, action, geoCode, maxAge,
+timeout, warmStart, blockResources, waitForSelector, geoCode, maxAge,
 maxRetries, and screenshot. Results are always saved to the dashboard.
 All mode attempts all seven services, continues after failures, and reports a summary.
 These are live calls and spend quota. Responses and screenshots are saved under manual-results/.`;

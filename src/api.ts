@@ -53,14 +53,12 @@ export type ScreenshotArea =
 /** Scrape HTML screenshot: false for none, or a screenshot area. */
 export type ScreenshotCapture = false | ScreenshotArea;
 export interface HtmlOptions extends PageOptions, LoadingOptions {
-  /** Scraper action that routes the request or simply flags it, useful for separating analytics per domain. */
-  action?: string;
   /** Screenshot to capture with the HTML: false for none, full for the entire page, top for the first viewport, or a WIDTHxHEIGHT viewport from 100 to 3840 pixels with an optional -ZOOM percent from 25 to 300, such as 1280x800 or 1920x1080-75. Setting a screenshot also sends browserRendering=true. */
   screenshot?: ScreenshotCapture;
 }
+/** Scrape Markdown accepts the shared page and loading controls. */
 export interface MarkdownOptions extends PageOptions, LoadingOptions {
-  /** Scraper action that routes the request or simply flags it, useful for separating analytics per domain. */
-  action?: string;
+  // markdown=true, html=false, and screenshot=false are fixed request fields.
 }
 export interface ScreenshotOptions extends PageOptions {
   /** Screenshot area to capture: full for the entire scroll height, top for the first viewport, or a WIDTHxHEIGHT viewport from 100 to 3840 pixels with an optional -ZOOM percent from 25 to 300, such as 1280x800 or 1920x1080-75. */
@@ -375,7 +373,6 @@ function loadingFields(options: LoadingOptions): LoadingFields {
 function sharedFields(
   page: PageFields,
   loading: LoadingFields = {},
-  action?: string,
 ): Fields {
   return {
     browserRendering: loading.browserRendering,
@@ -383,7 +380,6 @@ function sharedFields(
     warmStart: loading.warmStart,
     blockResources: loading.blockResources,
     waitForSelector: page.waitForSelector,
-    action,
     geoCode: page.geoCode,
     // Results are always saved to the dashboard; saveResult is not an option.
     saveResult: true,
@@ -431,7 +427,7 @@ export async function scrapeHtml<T = PageData>(
     url: page.url,
     html: true,
     markdown: false,
-    ...sharedFields(page, loading, optionalText("action", options.action)),
+    ...sharedFields(page, loading),
     screenshot,
   });
   return get<T>(params, options, page.timeout + 30);
@@ -450,11 +446,7 @@ export async function scrapeMarkdown<T = PageData>(
     markdown: true,
     html: false,
     screenshot: false,
-    ...sharedFields(
-      page,
-      loadingFields(options),
-      optionalText("action", options.action),
-    ),
+    ...sharedFields(page, loadingFields(options)),
   });
   return get<T>(params, options, page.timeout + 30);
 }

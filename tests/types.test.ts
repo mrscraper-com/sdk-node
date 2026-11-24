@@ -23,7 +23,6 @@ const h: Promise<MrScraperResponse<PageData>> = scrapeHtml(
     warmStart: true,
     blockResources: true,
     waitForSelector: "body",
-    action: "analytics",
     geoCode: "gb",
     maxAge: 86400000,
     maxRetries: 0,
@@ -37,7 +36,7 @@ const w: Promise<MrScraperResponse<WebSearchResponse>> = webSearch("test", {
 void [a, h, w];
 const captures: ScreenshotCapture[] = [false, "full", "top", "1280x800"];
 void captures;
-void scrapeMarkdown("https://example.com", { action: "analytics", maxAge: 0 });
+void scrapeMarkdown("https://example.com", { maxAge: 0 });
 void getScreenshot("https://example.com", {
   waitForSelector: "#results",
   geoCode: "de",
@@ -73,7 +72,13 @@ void getScreenshot("https://example.com", { browserRendering: false });
 void getScreenshot("https://example.com", { warmStart: true });
 // @ts-expect-error Markdown has no HTML option
 void scrapeMarkdown("https://example.com", { html: true });
-// @ts-expect-error JSON extraction has no action
+// @ts-expect-error action is not a documented Scraper API field
+void scrapeHtml("https://example.com", { action: "analytics" });
+// @ts-expect-error action is not a documented Scraper API field
+void scrapeMarkdown("https://example.com", { action: "analytics" });
+// @ts-expect-error action is not a documented Scraper API field
+void getScreenshot("https://example.com", { action: "analytics" });
+// @ts-expect-error action is not a documented Scraper API field
 void scrapeJson("https://example.com", { action: "analytics" });
 // @ts-expect-error super is not a documented Scraper API field
 void scrapeHtml("https://example.com", { super: true });
