@@ -20,15 +20,10 @@ const blocks = new Map(
 const groups = {
   status: ["StatusOptions"],
   "scrape-html": ["PageOptions", "LoadingOptions", "HtmlOptions"],
-  "scrape-markdown": [
-    "PageOptions",
-    "LoadingOptions",
-    "HtmlOptions",
-    "MarkdownOptions",
-  ],
-  "get-screenshot": ["PageOptions", "LoadingOptions", "ScreenshotOptions"],
+  "scrape-markdown": ["PageOptions", "LoadingOptions", "MarkdownOptions"],
+  "get-screenshot": ["PageOptions", "ScreenshotOptions"],
   "scrape-brand": ["BrandOptions"],
-  "scrape-json": ["PageOptions", "JsonOptions"],
+  "scrape-json": ["PageOptions", "LoadingOptions", "JsonOptions"],
   "web-search": ["WebSearchOptions"],
 };
 for (const service of reference.services) {
@@ -57,5 +52,13 @@ for (const service of reference.services) {
         );
     }
     assert.equal(fields.get("token"), reference.parameters.token.description);
+    // Options interfaces declare exactly the documented service parameters.
+    assert.deepEqual(
+      [...fields.keys()].filter((name) => name !== "token").sort(),
+      service.parameters
+        .map((key) => reference.parameters[key].name)
+        .filter((name) => !["url", "query"].includes(name))
+        .sort(),
+    );
   });
 }

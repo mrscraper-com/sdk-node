@@ -15,17 +15,61 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 const options = { token: "test-token" };
+const pageServices = [scrapeHtml, scrapeMarkdown, getScreenshot, scrapeJson];
+const invalidPageOptions = [
+  { timeout: 0 },
+  { timeout: 331 },
+  { timeout: 1.5 },
+  { maxRetries: -1 },
+  { maxRetries: 1.5 },
+  { maxAge: -1 },
+  { maxAge: 604800001 },
+  { maxAge: 1.5 },
+  { geoCode: "usa" },
+  { geoCode: "" },
+  { waitForSelector: " " },
+  { waitForSelector: "a".repeat(501) },
+];
 for (const [fn, extra] of [
-  [scrapeHtml, { timeout: 0 }],
-  [scrapeHtml, { timeout: 301 }],
-  [scrapeHtml, { timeout: 1.5 }],
-  [scrapeHtml, { maxRetries: -1 }],
-  [scrapeHtml, { waitUntil: "networkidle" }],
-  [scrapeHtml, { geoCode: "usa" }],
-  [getScreenshot, { screenshot: true }],
+  ...pageServices.flatMap((fn) =>
+    invalidPageOptions.map((options) => [fn, options]),
+  ),
+  ...[scrapeHtml, scrapeMarkdown, scrapeJson].flatMap((fn) => [
+    [fn, { browserRendering: "true" }],
+    [fn, { blockResources: 1 }],
+  ]),
+  ...[
+    true,
+    "",
+    "FULL",
+    "bottom",
+    "99x800",
+    "1280x3841",
+    "12345x800",
+    "1280x800-24",
+    "1280x800-301",
+    "1280x800-",
+  ].map((screenshot) => [scrapeHtml, { screenshot }]),
+  ...[
+    false,
+    true,
+    null,
+    "",
+    "FULL",
+    "bottom",
+    "99x800",
+    "1280x3841",
+    "12345x800",
+    "1280x800-24",
+    "1280x800-301",
+    "1280x800-",
+    1280,
+  ].map((screenshot) => [getScreenshot, { screenshot }]),
   [scrapeJson, { prompt: " " }],
+  [scrapeJson, { html: "true" }],
+  [scrapeJson, { screenshot: "full" }],
 ])
-  test(`rejects invalid ${JSON.stringify(extra)}`, async () => {
+  test(`${fn.name} rejects invalid ${JSON.stringify(extra).slice(0, 60)}`, async () => {
     globalThis.fetch = () => {
       throw Error("must not send");
     };
@@ -41,6 +85,7 @@ for (const [query, extra] of [
   ["ok", { numResults: 101 }],
   ["ok", { numResults: 10.5 }],
   ["ok", { country: "usa" }],
+  ["ok", { country: "" }],
 ])
   test(`rejects search ${query.slice(0, 5)} ${JSON.stringify(extra)}`, async () => {
     let sent = false;

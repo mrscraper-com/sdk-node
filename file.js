@@ -28,11 +28,17 @@ Usage: node file.js [all] [url] [query]
 Services: ${Object.keys(services).join(", ")}
 Examples:
   node file.js scrapeHtml https://example.com
-  node file.js scrapeMarkdown https://example.com '{"html":true}'
+  node file.js scrapeHtml https://example.com '{"screenshot":"top","maxAge":3600000,"geoCode":"gb"}'
+  node file.js scrapeMarkdown https://example.com '{"browserRendering":false,"blockResources":true}'
+  node file.js getScreenshot https://example.com '{"waitForSelector":"body","timeout":120}'
   node file.js getScreenshot https://example.com '{"screenshot":"top"}'
+  node file.js getScreenshot https://example.com '{"screenshot":"1920x1080-75"}'
   node file.js scrapeBrand https://example.com
-  node file.js scrapeJson https://example.com '{"prompt":"Extract titles and prices"}'
+  node file.js scrapeJson https://example.com '{"prompt":"Extract titles and prices","html":false}'
   node file.js webSearch "web scraping" '{"country":"id","numResults":20}'
+Options use the camelCase names documented in the README, such as browserRendering,
+timeout, warmStart, blockResources, waitForSelector, geoCode, maxAge,
+maxRetries, and screenshot. Results are always saved to the dashboard.
 All mode attempts all seven services, continues after failures, and reports a summary.
 These are live calls and spend quota. Responses and screenshots are saved under manual-results/.`;
 
@@ -154,7 +160,7 @@ async function main() {
     try {
       options = JSON.parse(optionsJson);
     } catch {
-      throw new Error("Options must be valid JSON, e.g. '{\"super\":true}'.");
+      throw new Error("Options must be valid JSON, e.g. '{\"geoCode\":\"gb\"}'.");
     }
     if (
       options === null ||
